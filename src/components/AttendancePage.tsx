@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Barber, AttendanceRecord, UserRole } from "../types";
 import { Icon } from "./Icons";
 
@@ -748,7 +748,9 @@ export function AttendancePage({
       {/* Floating Toast Notification */}
       {toastMsg && (
         <div className="toast-bar">
-          <Icon name="check" size={18} style={{ color: "#3FB950" } as React.CSSProperties} />
+          <span style={{ color: "#3FB950", display: "inline-flex" }}>
+            <Icon name="check" size={18} />
+          </span>
           <span>{toastMsg}</span>
         </div>
       )}

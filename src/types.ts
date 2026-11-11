@@ -1,7 +1,7 @@
 export type UserRole = "admin" | "cashier" | "employee";
 export type Page = "pos" | "attendance" | "invoices" | "services" | "inventory" | "admin";
 
-export type BarberAvailability = "متاح" | "مشغول" | "في استراحة" | "غير حاضر";
+export type BarberAvailability = "متاح" | "مشغول" | "في استراحة" | "غير حاضر" | "منصرف";
 
 export type Barber = {
   id: string;

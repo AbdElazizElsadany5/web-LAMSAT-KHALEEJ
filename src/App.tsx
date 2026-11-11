@@ -202,7 +202,7 @@ export default function App() {
     ];
 
     if (currentUserRole === "employee") {
-      return [{ id: "attendance", label: "صفحة الموظف", icon: "clock" }];
+      return [{ id: "attendance" as Page, label: "صفحة الموظف", icon: "clock" as IconName }];
     }
     if (currentUserRole === "cashier") {
       return allNav.filter((n) => n.id === "pos" || n.id === "attendance" || n.id === "invoices");
