@@ -1,0 +1,12 @@
+{
+  "title": "لمسة خليجي | Lamsat Khaleeji — نظام إدارة صالون الحلاقة",
+  "description": "نظام مكتبي احترافي لإدارة صالونات الحلاقة الفاخرة: كاشير سريع، حضور وانصراف، فواتير ضريبية، طباعة حرارية، ورقابة مالية متقدمة.",
+  "language": "ar",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

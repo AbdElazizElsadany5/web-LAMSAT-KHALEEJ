@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production Builds & Binaries (IMPORTANT: Never commit heavy .exe / installer files)
+dist-electron/
+release/
+build/
+bin/
+obj/
+
+# Tauri (if any)
+src-tauri/target/
+
+# Local Environment Variables & Caches
+.env
+.env.local
+.env.*.local
+.cache/
+.vite/
+vite.config.*.timestamp-*
+*.tsbuildinfo
+
