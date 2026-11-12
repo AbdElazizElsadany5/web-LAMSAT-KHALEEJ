@@ -28,15 +28,21 @@ export function generateCustomerInvoiceQrUrl(invoice: Partial<Invoice>, customDo
     const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
 
     const salon = getSalonSettings();
-    let baseUrl = "";
-    if (customDomain && customDomain.startsWith("http")) {
+    let baseUrl = "https://web-lamsat-khaleej.vercel.app";
+    if (
+      customDomain &&
+      customDomain.startsWith("http") &&
+      !customDomain.includes("darbix.me") &&
+      !customDomain.includes("github.io")
+    ) {
       baseUrl = customDomain.replace(/\/$/, "");
-    } else if (salon.qrPortalUrl && salon.qrPortalUrl.trim().startsWith("http")) {
+    } else if (
+      salon.qrPortalUrl &&
+      salon.qrPortalUrl.trim().startsWith("http") &&
+      !salon.qrPortalUrl.includes("darbix.me") &&
+      !salon.qrPortalUrl.includes("github.io")
+    ) {
       baseUrl = salon.qrPortalUrl.trim().replace(/\/$/, "");
-    } else if (typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("localhost") && !window.location.origin.includes("127.0.0.1")) {
-      baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, "");
-    } else {
-      baseUrl = "https://web-lamsat-khaleej.vercel.app";
     }
 
     const cleanBase = baseUrl.replace(/\/$/, "");

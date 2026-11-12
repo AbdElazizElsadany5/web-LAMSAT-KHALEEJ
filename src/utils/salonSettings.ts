@@ -39,8 +39,14 @@ export function getSalonSettings(): SalonSettings {
     updated.phone = defaultSalonSettings.phone;
     needsResave = true;
   }
-  if (!updated.qrPortalUrl || updated.qrPortalUrl.includes("hassan-obaed.github.io")) {
-    updated.qrPortalUrl = defaultSalonSettings.qrPortalUrl;
+  if (
+    !updated.qrPortalUrl ||
+    updated.qrPortalUrl.includes("github.io") ||
+    updated.qrPortalUrl.includes("darbix.me") ||
+    updated.qrPortalUrl.includes("hassan-obaed") ||
+    updated.qrPortalUrl.includes("abdelazizelsadany5")
+  ) {
+    updated.qrPortalUrl = "https://web-lamsat-khaleej.vercel.app/";
     needsResave = true;
   }
 
