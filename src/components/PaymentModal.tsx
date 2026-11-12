@@ -860,33 +860,53 @@ export function PaymentModal({
                   <hr className="thermal-divider" />
 
                   {/* Real Authentic QR Code Generator (Scan to View Invoice & Services Menu) */}
-                  <div style={{ textAlign: "center", margin: "10px 0 8px" }}>
-                    <QrCode
-                      value={createdInvoice ? generateCustomerInvoiceQrUrl(createdInvoice) : `${thermalSettings.headerTitle}|${thermalSettings.taxId}`}
-                      size={thermalSettings.paperWidth === "58mm" ? 72 : 84}
-                    />
-                    <div style={{ fontSize: 9.5, color: "#111", marginTop: 6, fontWeight: 800 }}>
-                      امسح الكود بكاميرا الموبايل لعرض فاتورتك وقائمة خدمات الصالون
-                    </div>
-                    {createdInvoice && (
-                      <a
-                        href={generateCustomerInvoiceQrUrl(createdInvoice)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="no-print"
-                        style={{
-                          fontSize: 9.5,
-                          color: "#6A5726",
-                          textDecoration: "underline",
-                          display: "inline-block",
-                          marginTop: 3,
-                          cursor: "pointer",
-                        }}
-                      >
-                        [ تجربة ومعاينة صفحة الفاتورة الآن ]
-                      </a>
-                    )}
-                  </div>
+                  {(() => {
+                    const invoiceForQr = createdInvoice || {
+                      id: `INV-${Date.now().toString().slice(-4)}`,
+                      total: finalTotal,
+                      subtotal,
+                      customerName: customerName || "عميل الصالون",
+                      customerPhone: customerPhone || "",
+                      paymentMethod,
+                      items: cart.map((it, idx) => ({
+                        id: idx + 1,
+                        name: it.service.name,
+                        price: it.service.price,
+                        barber: it.barber.name,
+                        category: it.service.category,
+                      })),
+                      date: new Date().toLocaleDateString("ar-EG"),
+                      time: new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
+                    };
+                    const qrUrl = generateCustomerInvoiceQrUrl(invoiceForQr);
+                    return (
+                      <div style={{ textAlign: "center", margin: "10px 0 8px" }}>
+                        <QrCode
+                          value={qrUrl}
+                          size={thermalSettings.paperWidth === "58mm" ? 80 : 96}
+                        />
+                        <div style={{ fontSize: 9.5, color: "#111", marginTop: 6, fontWeight: 800 }}>
+                          امسح الكود بكاميرا الموبايل لعرض فاتورتك وقائمة خدمات الصالون
+                        </div>
+                        <a
+                          href={qrUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="no-print"
+                          style={{
+                            fontSize: 9.5,
+                            color: "#6A5726",
+                            textDecoration: "underline",
+                            display: "inline-block",
+                            marginTop: 3,
+                            cursor: "pointer",
+                          }}
+                        >
+                          [ تجربة ومعاينة صفحة الفاتورة الآن ]
+                        </a>
+                      </div>
+                    );
+                  })()}
 
                   <div style={{ textAlign: "center", fontSize: 10.5, fontWeight: 700, color: "#222", marginTop: 6 }}>
                     {thermalSettings.footerMsg || "شكراً لزيارتكم • أناقتك تبدأ من هنا"}
