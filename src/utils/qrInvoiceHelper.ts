@@ -36,14 +36,14 @@ export function generateCustomerInvoiceQrUrl(invoice: Partial<Invoice>, customDo
     } else if (typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("localhost") && !window.location.origin.includes("127.0.0.1")) {
       baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, "");
     } else {
-      baseUrl = "https://hassan-obaed.github.io/LAMSAT-KHALEEJI";
+      baseUrl = "https://abdelazizelsadany5.github.io/web-LAMSAT-KHALEEJ";
     }
 
     const cleanBase = baseUrl.replace(/\/$/, "");
     return `${cleanBase}/?view=invoice&d=${encodeURIComponent(base64)}`;
   } catch (err) {
     console.warn("Failed to generate QR URL:", err);
-    return `https://hassan-obaed.github.io/LAMSAT-KHALEEJI/?view=invoice&id=${invoice.id || "INV"}`;
+    return `https://abdelazizelsadany5.github.io/web-LAMSAT-KHALEEJ/?view=invoice&id=${invoice.id || "INV"}`;
   }
 }
 

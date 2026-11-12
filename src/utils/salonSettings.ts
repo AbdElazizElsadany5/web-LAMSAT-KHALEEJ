@@ -17,7 +17,7 @@ export const defaultSalonSettings: SalonSettings = {
   phone: "01040734582",
   taxNumber: "412890331",
   commercialReg: "204910",
-  qrPortalUrl: "https://hassan-obaed.github.io/LAMSAT-KHALEEJI/",
+  qrPortalUrl: "https://abdelazizelsadany5.github.io/web-LAMSAT-KHALEEJ/",
 };
 
 const SALON_SETTINGS_KEY = "salon_settings";
@@ -39,11 +39,7 @@ export function getSalonSettings(): SalonSettings {
     updated.phone = defaultSalonSettings.phone;
     needsResave = true;
   }
-  if (
-    !updated.qrPortalUrl ||
-    updated.qrPortalUrl.includes("vercel.app") ||
-    updated.qrPortalUrl.includes("lamsat-khaleeji.com")
-  ) {
+  if (!updated.qrPortalUrl) {
     updated.qrPortalUrl = defaultSalonSettings.qrPortalUrl;
     needsResave = true;
   }
