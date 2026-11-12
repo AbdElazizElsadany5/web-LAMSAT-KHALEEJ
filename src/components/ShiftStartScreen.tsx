@@ -49,7 +49,7 @@ export function ShiftStartScreen({
     e.preventDefault();
     const trimmed = cashierName.trim();
     if (!trimmed) {
-      setError("من فضلك اكتب اسم الموظف المسؤول عن الوردية أولاً");
+      setError("من فضلك اكتب اسم المسؤول عن الوردية أولاً");
       return;
     }
 
@@ -60,18 +60,15 @@ export function ShiftStartScreen({
       barbers.find((b) => normalizeEmployeeName(b.name).includes(normalizedInput)) ||
       barbers.find((b) => b.username && b.username.toLowerCase() === trimmed.toLowerCase());
 
-    if (!matchedEmployee) {
-      setError("هذا الاسم غير مسجل في قائمة الموظفين بالإدارة — يُسمح فقط للموظفين المسجلين ببدء الوردية.");
-      return;
-    }
-
-    if (matchedEmployee.canStartShift === false) {
+    if (matchedEmployee && matchedEmployee.canStartShift === false) {
       setError(`غير مصرح للموظف «${matchedEmployee.name}» ببدء الوردية — يرجى مراجعة الإدارة لتفعيل الصلاحية.`);
       return;
     }
 
     setError("");
-    onStartShift(matchedEmployee.name, 0);
+    // Use official matched employee name if recognized, otherwise allow any entered name directly
+    const finalName = matchedEmployee ? matchedEmployee.name : trimmed;
+    onStartShift(finalName, 0);
   };
 
   return (
@@ -259,6 +256,59 @@ export function ShiftStartScreen({
               }}
               autoFocus
             />
+
+            {barbers.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    color: isLight ? "#7A7366" : "#8A8A8A",
+                    display: "block",
+                    marginBottom: 6,
+                  }}
+                >
+                  أو اختر سريعاً من الموظفين:
+                </span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {barbers.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => {
+                        setCashierName(b.name);
+                        if (error) setError("");
+                      }}
+                      style={{
+                        padding: "5px 12px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        borderRadius: 8,
+                        background: cashierName === b.name
+                          ? "var(--gold)"
+                          : isLight
+                          ? "#F0EAE0"
+                          : "#232018",
+                        color: cashierName === b.name
+                          ? "#000"
+                          : isLight
+                          ? "#3E3527"
+                          : "#D4AF37",
+                        border: cashierName === b.name
+                          ? "1px solid var(--gold)"
+                          : isLight
+                          ? "1px solid #D8CFBE"
+                          : "1px solid #3A3220",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {error && (
