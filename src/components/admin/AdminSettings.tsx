@@ -1697,7 +1697,7 @@ export function AdminSettings({
               <div className="form-group">
                 <label className="form-label">المؤثرات الصوتية (Web Audio API):</label>
                 <span style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}>
-                  أصوات درج الكاشير، تنبيهات طابعة الفواتير، ونغمة نداء شاشة الدور.
+                  أصوات درج الكاشير، وتنبيهات طابعة الفواتير والعمليات.
                 </span>
                 <span className="status-pill active">مفعلة وتعمل أوفلاين</span>
               </div>

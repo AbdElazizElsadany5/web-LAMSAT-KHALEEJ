@@ -9,7 +9,6 @@ export function DesktopTitlebar({
   onLockToggle,
   isMuted,
   onMuteToggle,
-  onOpenQueue,
   themeMode = "dark",
   onThemeToggle,
 }: {
@@ -21,7 +20,6 @@ export function DesktopTitlebar({
   onLockToggle?: () => void;
   isMuted?: boolean;
   onMuteToggle?: () => void;
-  onOpenQueue?: () => void;
   themeMode?: "dark" | "light";
   onThemeToggle?: () => void;
 }) {

@@ -34,7 +34,6 @@ import { PosPage } from "./components/PosPage";
 import { PaymentModal } from "./components/PaymentModal";
 import { AttendancePage } from "./components/AttendancePage";
 import { AdminPage, ADMIN_SECTIONS } from "./components/AdminPage";
-import { QueueScreenModal } from "./components/QueueScreenModal";
 import { CustomerInvoiceView } from "./components/CustomerInvoiceView";
 import { decodeInvoiceFromQrUrl } from "./utils/qrInvoiceHelper";
 import { sfx } from "./utils/audio";
@@ -88,7 +87,6 @@ export default function App() {
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [lockPin, setLockPin] = useState("");
   const [isMuted, setIsMuted] = useState(false);
-  const [showQueueModal, setShowQueueModal] = useState(false);
 
   const currentUserRole: UserRole = isAdminUnlocked ? "admin" : "cashier";
   const currentUsername = activeShiftSession?.cashierName || "مسؤول الوردية";
@@ -98,11 +96,6 @@ export default function App() {
   const [adminSection, setAdminSection] = useState<string>("نظرة عامة");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(getThemeMode);
-
-  // Auto-dismiss open modals when switching between pages
-  useEffect(() => {
-    setShowQueueModal(false);
-  }, [currentPage]);
 
   useEffect(() => {
     applyThemeMode(themeMode);
@@ -1477,7 +1470,6 @@ export default function App() {
             onCheckout={handleOpenCheckout}
             activeCashier={activeShiftSession.cashierName}
             shiftNumber={activeShiftSession.shiftId}
-            onOpenQueue={() => setShowQueueModal(true)}
             onAddAdvance={handleAddAdvance}
             onCashOut={handleCashOut}
             drawerCash={
@@ -1833,14 +1825,6 @@ export default function App() {
             </form>
           </div>
         </div>
-      )}
-
-      {/* Queue Screen Modal */}
-      {showQueueModal && (
-        <QueueScreenModal
-          barbers={barbers}
-          onClose={() => setShowQueueModal(false)}
-        />
       )}
 
       {/* Screen Lock Overlay */}

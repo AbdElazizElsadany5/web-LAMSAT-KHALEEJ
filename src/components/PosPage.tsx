@@ -20,7 +20,6 @@ export function PosPage({
   onCheckout,
   activeCashier,
   shiftNumber: _shiftNumber = 104,
-  onOpenQueue,
   onAddAdvance,
   onCashOut,
   drawerCash = 0,
@@ -38,7 +37,6 @@ export function PosPage({
   onCheckout: (cart: CartItem[], total: number) => void;
   activeCashier: string;
   shiftNumber?: number;
-  onOpenQueue?: () => void;
   onAddAdvance?: (advance: AdvanceRecord) => void;
   onCashOut?: (payload: CashOutPayload) => Promise<{ ok: boolean; message?: string }>;
   drawerCash?: number;
@@ -465,9 +463,6 @@ export function PosPage({
       if (e.key === "F11") {
         e.preventDefault();
         handleToggleFocusMode();
-      } else if (e.key === "F6") {
-        e.preventDefault();
-        onOpenQueue?.();
       } else if (e.key === "F7") {
         e.preventDefault();
         setShowCashOutModal(true);
