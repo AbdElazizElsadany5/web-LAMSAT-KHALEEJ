@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useState, useEffect } from "react";
 import QRCode from "qrcode";
 
 interface QrCodeProps {
@@ -8,70 +8,40 @@ interface QrCodeProps {
   title?: string;
 }
 
-export function QrCode({ value, size = 84, className, title }: QrCodeProps) {
-  const qrMatrix = useMemo(() => {
-    try {
-      const qr = QRCode.create(value || "https://web-lamsat-khaleej.vercel.app", {
-        errorCorrectionLevel: "M",
-      });
-      return qr.modules;
-    } catch (e) {
-      console.warn("Failed to generate QR code with M level, retrying with L:", e);
-      try {
-        const qrFallback = QRCode.create(value || "https://web-lamsat-khaleej.vercel.app", {
+export function QrCode({ value, size = 140, className, title }: QrCodeProps) {
+  const [dataUrl, setDataUrl] = useState<string>("");
+
+  useEffect(() => {
+    let isMounted = true;
+    const targetUrl = value || "https://web-lamsat-khaleej.vercel.app";
+
+    QRCode.toDataURL(targetUrl, {
+      width: Math.max(280, size * 2),
+      margin: 2,
+      errorCorrectionLevel: "M",
+      color: {
+        dark: "#000000",
+        light: "#FFFFFF",
+      },
+    })
+      .then((url) => {
+        if (isMounted) setDataUrl(url);
+      })
+      .catch((err) => {
+        console.warn("QR generation fallback to L level:", err);
+        QRCode.toDataURL(targetUrl, {
+          width: Math.max(280, size * 2),
+          margin: 2,
           errorCorrectionLevel: "L",
+        }).then((url) => {
+          if (isMounted) setDataUrl(url);
         });
-        return qrFallback.modules;
-      } catch (err) {
-        console.error("Critical QR Code generation error:", err);
-        return null;
-      }
-    }
-  }, [value]);
+      });
 
-  if (!qrMatrix) {
-    return (
-      <div
-        className={className}
-        style={{
-          width: size,
-          height: size,
-          background: "#FFF",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 10,
-          color: "#999",
-        }}
-      >
-        QR Error
-      </div>
-    );
-  }
-
-  const moduleCount = qrMatrix.size;
-  // Standard 2-module quiet zone (margin) for 100% camera scanning reliability
-  const margin = 2;
-  const totalGridSize = moduleCount + margin * 2;
-  const cellSize = size / totalGridSize;
-
-  const rects: React.ReactNode[] = [];
-  for (let r = 0; r < moduleCount; r++) {
-    for (let c = 0; c < moduleCount; c++) {
-      if (qrMatrix.get(r, c)) {
-        rects.push(
-          <rect
-            key={`${r}-${c}`}
-            x={(c + margin) * cellSize}
-            y={(r + margin) * cellSize}
-            width={cellSize}
-            height={cellSize}
-            fill="#000000"
-          />
-        );
-      }
-    }
-  }
+    return () => {
+      isMounted = false;
+    };
+  }, [value, size]);
 
   return (
     <div
@@ -79,22 +49,43 @@ export function QrCode({ value, size = 84, className, title }: QrCodeProps) {
       style={{
         display: "inline-block",
         background: "#FFFFFF",
-        padding: 4,
-        borderRadius: 4,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+        padding: 6,
+        borderRadius: 8,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+        textAlign: "center",
       }}
       title={title || "رمز QR الإلكتروني المعتمد للفاتورة"}
     >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        style={{ display: "block" }}
-        shapeRendering="crispEdges"
-      >
-        <rect width={size} height={size} fill="#FFFFFF" />
-        {rects}
-      </svg>
+      {dataUrl ? (
+        <img
+          src={dataUrl}
+          alt="QR Code"
+          width={size}
+          height={size}
+          style={{
+            display: "block",
+            width: size,
+            height: size,
+            imageRendering: "pixelated",
+            borderRadius: 4,
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            width: size,
+            height: size,
+            background: "#F5F5F5",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 11,
+            color: "#999",
+          }}
+        >
+          جارٍ التحميل...
+        </div>
+      )}
     </div>
   );
 }

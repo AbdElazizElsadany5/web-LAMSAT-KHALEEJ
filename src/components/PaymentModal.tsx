@@ -883,7 +883,7 @@ export function PaymentModal({
                       <div style={{ textAlign: "center", margin: "10px 0 8px" }}>
                         <QrCode
                           value={qrUrl}
-                          size={thermalSettings.paperWidth === "58mm" ? 80 : 96}
+                          size={135}
                         />
                         <div style={{ fontSize: 9.5, color: "#111", marginTop: 6, fontWeight: 800 }}>
                           امسح الكود بكاميرا الموبايل لعرض فاتورتك وقائمة خدمات الصالون
