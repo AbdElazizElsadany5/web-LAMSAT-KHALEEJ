@@ -143,9 +143,22 @@ export default function App() {
   const [expenses, setExpenses] = useState<ExpenseRecord[]>(() =>
     secureStorage.getItem<ExpenseRecord[]>("pos_expenses_data", initialExpenses)
   );
-  const [shifts, setShifts] = useState<ShiftRecord[]>(() =>
-    secureStorage.getItem<ShiftRecord[]>("pos_shifts_data", [initialShift])
-  );
+  const [shifts, setShifts] = useState<ShiftRecord[]>(() => {
+    const rawShifts = secureStorage.getItem<ShiftRecord[]>("pos_shifts_data", [initialShift]);
+    const session = secureStorage.getItem<ActiveShiftSession | null>("pos_active_shift_session", null);
+    // Sanitize: ensure no ghost shift remains active if there is no active session
+    return rawShifts.map((s) => {
+      if (!session && s.status === "نشطة") {
+        return {
+          ...s,
+          status: "مغلقة" as const,
+          closeTime: s.closeTime || "09:00 م",
+          endTime: s.endTime || "09:00 م",
+        };
+      }
+      return s;
+    });
+  });
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() =>
     secureStorage.getItem<AuditLog[]>("pos_audit_data", initialAuditLogs)
   );
@@ -341,9 +354,9 @@ export default function App() {
       status: "نشطة",
     };
 
-    setShifts((prev) => [
+    const updatedShifts: ShiftRecord[] = [
       newShift,
-      ...prev.map((s) =>
+      ...shifts.map((s) =>
         s.status === "نشطة"
           ? {
               ...s,
@@ -352,14 +365,19 @@ export default function App() {
             }
           : s,
       ),
-    ]);
+    ];
 
-    setActiveShiftSession({
+    const session: ActiveShiftSession = {
       shiftId: nextShiftId,
       cashierName,
       startTimestamp: now,
       openingCash,
-    });
+    };
+
+    setShifts(updatedShifts);
+    setActiveShiftSession(session);
+    secureStorage.setItem("pos_shifts_data", updatedShifts);
+    secureStorage.setItem("pos_active_shift_session", session);
     setIsAdminUnlocked(false);
     setIsScreenLocked(false);
     setCurrentPage("pos");
@@ -390,9 +408,12 @@ export default function App() {
 
   // Handle Payment Complete
   const handlePaymentSuccess = (newInvoice: Invoice) => {
-    setInvoices((prev) => [newInvoice, ...prev]);
+    const updatedInvoices = [newInvoice, ...invoices];
+    setInvoices(updatedInvoices);
+    secureStorage.setItem("pos_invoices_data", updatedInvoices);
     setClearCartSignal((s) => s + 1);
-    // update shift cash
+
+    // update shift cash synchronously
     setShifts((prev) => {
       const active = prev.find((s) => s.status === "نشطة");
       if (!active) return prev;
@@ -406,7 +427,7 @@ export default function App() {
         newCash += newInvoice.splitDetails.cash;
         newCard += newInvoice.splitDetails.card;
       }
-      return prev.map((s) =>
+      const updated = prev.map((s) =>
         s.id === active.id
           ? {
               ...s,
@@ -417,6 +438,8 @@ export default function App() {
             }
           : s,
       );
+      secureStorage.setItem("pos_shifts_data", updated);
+      return updated;
     });
 
     addAuditLog(
@@ -896,21 +919,24 @@ export default function App() {
 
   // Expenses
   const handleAddExpense = (exp: ExpenseRecord) => {
-    setExpenses((prev) => [exp, ...prev]);
-    if (exp.shiftDeduction) {
-      setShifts((prev) =>
-        prev.map((s) =>
-          s.status === "نشطة"
-            ? {
-                ...s,
-                drawerExpenses: s.drawerExpenses + exp.amount,
-                cashExpenses: (s.cashExpenses ?? s.drawerExpenses) + exp.amount,
-                expectedCash: s.expectedCash - exp.amount,
-                expectedDrawerCash: (s.expectedDrawerCash ?? s.expectedCash) - exp.amount,
-              }
-            : s,
-        ),
+    const updatedExpenses = [exp, ...expenses];
+    setExpenses(updatedExpenses);
+    secureStorage.setItem("pos_expenses_data", updatedExpenses);
+
+    if (exp.shiftDeduction || exp.deductedFromDrawer) {
+      const updatedShifts = shifts.map((s) =>
+        s.status === "نشطة"
+          ? {
+              ...s,
+              drawerExpenses: s.drawerExpenses + exp.amount,
+              cashExpenses: (s.cashExpenses ?? s.drawerExpenses) + exp.amount,
+              expectedCash: s.expectedCash - exp.amount,
+              expectedDrawerCash: (s.expectedDrawerCash ?? s.expectedCash) - exp.amount,
+            }
+          : s,
       );
+      setShifts(updatedShifts);
+      secureStorage.setItem("pos_shifts_data", updatedShifts);
     }
   };
 
@@ -920,28 +946,30 @@ export default function App() {
   // Close Shift
   const handleCloseShift = (shiftId: number, actualCash: number, notes: string, durationOverride?: string) => {
     const durationText = durationOverride || activeShiftDurationText;
-    setShifts((prev) =>
-      prev.map((s) =>
-        s.id === shiftId
-          ? {
-              ...s,
-              closeTime: new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
-              closeDate: new Date().toLocaleDateString("ar-EG", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              }),
-              closeTimestamp: Date.now(),
-              durationText,
-              actualCash,
-              difference: actualCash - s.expectedCash,
-              status: "مغلقة",
-              handoverNotes: notes,
-            }
-          : s,
-      ),
+    const updatedShifts: ShiftRecord[] = shifts.map((s) =>
+      s.id === shiftId
+        ? {
+            ...s,
+            closeTime: new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
+            closeDate: new Date().toLocaleDateString("ar-EG", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            }),
+            closeTimestamp: Date.now(),
+            durationText,
+            actualCash,
+            difference: actualCash - s.expectedCash,
+            status: "مغلقة" as const,
+            handoverNotes: notes,
+          }
+        : s,
     );
+    setShifts(updatedShifts);
+    secureStorage.setItem("pos_shifts_data", updatedShifts);
+    secureStorage.removeItem("pos_active_shift_session");
+
     addAuditLog(
       `إغلاق الوردية #${shiftId} وتسليم الدرج (المدة: ${durationText})`,
       "إغلاق وردية",
@@ -980,6 +1008,17 @@ export default function App() {
     const expected = currentActiveShift?.expectedDrawerCash ?? currentActiveShift?.expectedCash ?? 0;
     handleCloseShift(activeShiftSession.shiftId, expected, "", activeShiftDurationText);
     sfx.playClick();
+  };
+
+  const handleDeleteShift = (shiftId: number) => {
+    const updated = shifts.filter((s) => s.id !== shiftId);
+    setShifts(updated);
+    secureStorage.setItem("pos_shifts_data", updated);
+    if (activeShiftSession?.shiftId === shiftId) {
+      setActiveShiftSession(null);
+      secureStorage.removeItem("pos_active_shift_session");
+    }
+    showToast(`تم حذف الوردية #${shiftId} نهائياً من السجل`);
   };
 
   // Screen Title & Subtitle
@@ -1528,6 +1567,7 @@ export default function App() {
             }}
             onAddExpense={handleAddExpense}
             onCloseShift={handleCloseShift}
+            onDeleteShift={handleDeleteShift}
             onSaveSettings={(s) => {
               const updated = saveSalonSettings({
                 salonName: s.salonName,

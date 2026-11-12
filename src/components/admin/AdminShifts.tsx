@@ -7,15 +7,17 @@ import { sfx } from "../../utils/audio";
 export function AdminShifts({
   shifts,
   onCloseShift,
+  onDeleteShift,
   onShowToast,
   invoices = [],
 }: {
   shifts: ShiftRecord[];
   onCloseShift: (shiftId: number, actualCash: number, notes: string) => void;
+  onDeleteShift?: (shiftId: number) => void;
   onShowToast: (msg: string) => void;
   invoices?: Invoice[];
 }) {
-  const activeShift = shifts.find((s) => s.status === "نشطة") || shifts[0];
+  const activeShift = shifts.find((s) => s.status === "نشطة");
   const [closeModalOpen, setCloseModalOpen] = useState(false);
   const [selectedShift, setSelectedShift] = useState<ShiftRecord | null>(null);
 
@@ -38,6 +40,7 @@ export function AdminShifts({
   const variance = actualCashCalculated - (activeShift?.expectedDrawerCash || 0);
 
   const handleConfirmClose = () => {
+    if (!activeShift) return;
     onCloseShift(activeShift.id, actualCashCalculated, closeNotes);
     setCloseModalOpen(false);
     onShowToast(`تم إغلاق الوردية #${activeShift.id} وتسوية الخزينة بنجاح`);
@@ -225,16 +228,18 @@ export function AdminShifts({
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => setSelectedShift(activeShift)}
-            style={{ height: 38, padding: "0 14px", fontSize: 13, gap: 6 }}
-          >
-            <Icon name="search" size={15} />
-            <span>عرض تفاصيل وساعات الوردية الحالية</span>
-          </button>
-          {activeShift.status === "نشطة" && (
+          {activeShift && (
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => setSelectedShift(activeShift)}
+              style={{ height: 38, padding: "0 14px", fontSize: 13, gap: 6 }}
+            >
+              <Icon name="search" size={15} />
+              <span>عرض تفاصيل وساعات الوردية الحالية</span>
+            </button>
+          )}
+          {activeShift && activeShift.status === "نشطة" && (
             <button
               type="button"
               className="primary-btn"
@@ -248,86 +253,146 @@ export function AdminShifts({
         </div>
       </div>
 
-      {/* Active Shift Spotlight Card */}
-      <div
-        style={{
-          background: "var(--card)",
-          border: "1.5px solid var(--gold)",
-          borderRadius: 12,
-          padding: 20,
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-          cursor: "pointer",
-        }}
-        onClick={() => setSelectedShift(activeShift)}
-        title="انقر لعرض التقرير الكامل والتاريخ وعدد الساعات لهذه الوردية"
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span
+      {/* Active Shift Spotlight Card or Closed Notice */}
+      {activeShift ? (
+        <div
+          style={{
+            background: "var(--card)",
+            border: "1.5px solid var(--gold)",
+            borderRadius: 12,
+            padding: 20,
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            cursor: "pointer",
+          }}
+          onClick={() => setSelectedShift(activeShift)}
+          title="انقر لعرض التقرير الكامل والتاريخ وعدد الساعات لهذه الوردية"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  background: "rgba(63, 185, 80, 0.15)",
+                  color: "var(--success-text)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 900,
+                  fontSize: 16,
+                }}
+              >
+                #{activeShift.id}
+              </span>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
+                  الوردية الحالية #{activeShift.id} (نشطة الآن)
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                  الكاشير المناوب: <strong style={{ color: "var(--text)" }}>{activeShift.cashierName}</strong> • بدء الوردية: {activeShift.startTime || activeShift.openTime}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="status-pill active">نشطة وجارية</span>
+              <span style={{ fontSize: 12, color: "var(--gold)", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                <Icon name="info" size={13} />
+                <span>انقر لعرض التفاصيل الكاملة</span>
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
+            <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>الافتتاحية:</span>
+              <strong style={{ fontSize: 16, color: "var(--text)", fontFamily: "Inter" }}>{activeShift.initialCash || activeShift.openingCash} ج.م</strong>
+            </div>
+            <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>مبيعات نقدية (كاش):</span>
+              <strong style={{ fontSize: 16, color: "var(--light-gold)", fontFamily: "Inter" }}>{activeShift.cashSales} ج.م</strong>
+            </div>
+            <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>إنستاباي وبطاقات:</span>
+              <strong style={{ fontSize: 16, color: "var(--success-text)", fontFamily: "Inter" }}>{(activeShift.cardSales || 0) + (activeShift.instapaySales || activeShift.instaPaySales || 0)} ج.م</strong>
+            </div>
+            <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>مصروفات من الدرج:</span>
+              <strong style={{ fontSize: 16, color: "var(--danger-text)", fontFamily: "Inter" }}>-{activeShift.cashExpenses || activeShift.drawerExpenses || 0} ج.م</strong>
+            </div>
+            <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8, border: "1px dashed var(--gold)" }}>
+              <span style={{ fontSize: 11, color: "var(--light-gold)", display: "block" }}>المتوقع بالدرج:</span>
+              <strong style={{ fontSize: 18, color: "var(--light-gold)", fontFamily: "Inter" }}>{activeShift.expectedDrawerCash ?? activeShift.expectedCash} ج.م</strong>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div
+          style={{
+            background: "var(--card)",
+            border: "1px dashed var(--border)",
+            borderRadius: 12,
+            padding: "20px 24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div
               style={{
                 width: 44,
                 height: 44,
                 borderRadius: 10,
-                background: "rgba(63, 185, 80, 0.15)",
-                color: "var(--success-text)",
+                background: "var(--surface-soft)",
+                color: "var(--gold)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontWeight: 900,
-                fontSize: 16,
               }}
             >
-              #{activeShift.id}
-            </span>
+              <Icon name="clock" size={20} />
+            </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
-                الوردية الحالية #{activeShift.id} (نشطة الآن)
+              <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>
+                لا توجد وردية كاشير نشطة حالياً
               </div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-                الكاشير المناوب: <strong style={{ color: "var(--text)" }}>{activeShift.cashierName}</strong> • بدء الوردية: {activeShift.startTime || activeShift.openTime}
+                جميع الورديات السابقة تم إغلاقها وجردها بالكامل — يمكنك بدء وردية جديدة عبر شاشة الكاشير
               </div>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className="status-pill active">نشطة وجارية</span>
-            <span style={{ fontSize: 12, color: "var(--gold)", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-              <Icon name="info" size={13} />
-              <span>انقر لعرض التفاصيل الكاملة</span>
-            </span>
-          </div>
+          <span className="status-pill inactive">الورديات مغلقة</span>
         </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
-          <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8 }}>
-            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>الافتتاحية:</span>
-            <strong style={{ fontSize: 16, color: "var(--text)", fontFamily: "Inter" }}>{activeShift.initialCash || activeShift.openingCash} ج.م</strong>
-          </div>
-          <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8 }}>
-            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>مبيعات نقدية (كاش):</span>
-            <strong style={{ fontSize: 16, color: "var(--light-gold)", fontFamily: "Inter" }}>{activeShift.cashSales} ج.م</strong>
-          </div>
-          <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8 }}>
-            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>إنستاباي وبطاقات:</span>
-            <strong style={{ fontSize: 16, color: "var(--success-text)", fontFamily: "Inter" }}>{(activeShift.cardSales || 0) + (activeShift.instapaySales || activeShift.instaPaySales || 0)} ج.م</strong>
-          </div>
-          <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8 }}>
-            <span style={{ fontSize: 11, color: "var(--muted)", display: "block" }}>مصروفات من الدرج:</span>
-            <strong style={{ fontSize: 16, color: "var(--danger-text)", fontFamily: "Inter" }}>-{activeShift.cashExpenses || activeShift.drawerExpenses || 0} ج.م</strong>
-          </div>
-          <div style={{ background: "var(--surface-soft)", padding: 12, borderRadius: 8, border: "1px dashed var(--gold)" }}>
-            <span style={{ fontSize: 11, color: "var(--light-gold)", display: "block" }}>المتوقع بالدرج:</span>
-            <strong style={{ fontSize: 18, color: "var(--light-gold)", fontFamily: "Inter" }}>{activeShift.expectedDrawerCash ?? activeShift.expectedCash} ج.م</strong>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Shifts History Table with Click-to-View Interaction */}
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>
-            سجل الورديات السابقة وجرد الخزائن
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>
+              سجل الورديات السابقة وجرد الخزائن
+            </div>
+            {shifts.some((s) => s.id === 104) && onDeleteShift && (
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => {
+                  if (window.confirm("هل تريد حذف الوردية التجريبية الافتراضية #104 من السجل نهائياً؟")) {
+                    onDeleteShift(104);
+                  }
+                }}
+                style={{ height: 28, padding: "0 10px", fontSize: 11.5, color: "var(--danger-text)", borderColor: "var(--danger-border)", gap: 4 }}
+                title="حذف الوردية التجريبية الافتراضية #104"
+              >
+                <Icon name="trash" size={12} />
+                <span>حذف الوردية التجريبية #104</span>
+              </button>
+            )}
           </div>
           <div style={{ fontSize: 12, color: "var(--gold)", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
             <Icon name="info" size={14} />
@@ -865,6 +930,23 @@ export function AdminShifts({
                   <Icon name="printer" size={16} />
                   <span>طباعة إيصال تقرير الوردية كبون حراري</span>
                 </button>
+                {onDeleteShift && (
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => {
+                      if (window.confirm(`هل أنت متأكد من حذف الوردية #${selectedShift.id} نهائياً من سجل الورديات؟`)) {
+                        onDeleteShift(selectedShift.id);
+                        setSelectedShift(null);
+                      }
+                    }}
+                    style={{ height: 42, padding: "0 14px", color: "var(--danger-text)", borderColor: "var(--danger-border)", gap: 6 }}
+                    title="حذف هذه الوردية نهائياً من السجل"
+                  >
+                    <Icon name="trash" size={15} />
+                    <span>حذف الوردية</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="secondary-btn"

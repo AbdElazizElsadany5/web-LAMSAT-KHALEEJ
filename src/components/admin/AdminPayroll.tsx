@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Barber, AdvanceRecord, AttendanceRecord } from "../../types";
+import { Barber, AdvanceRecord, AttendanceRecord, ExpenseRecord } from "../../types";
 import { Icon } from "../Icons";
 import {
   getAttendancePolicy,
@@ -22,11 +22,13 @@ export function AdminPayroll({
   advances = [],
   attendanceRecords = [],
   onShowToast,
+  onAddExpense,
 }: {
   barbers: Barber[];
   advances?: AdvanceRecord[];
   attendanceRecords?: AttendanceRecord[];
   onShowToast: (msg: string) => void;
+  onAddExpense?: (exp: ExpenseRecord) => void;
 }) {
   const [payrollSettings, setPayrollSettings] = useState<PayrollSettings>(getPayrollSettings);
   const [disbursedIds, setDisbursedIds] = useState<string[]>(() =>
@@ -620,7 +622,7 @@ export function AdminPayroll({
                     onClick={() => {
                       const updated = setDisbursedEmployee(selectedBarberForVoucher.barber.id, false, payrollSettings);
                       setDisbursedIds(updated);
-                      onShowToast(`↩️ تم إلغاء حالة القبض وإعادة تفعيل زرار الصرف للموظف «${selectedBarberForVoucher.barber.name}»`);
+                      onShowToast(`تم إلغاء حالة القبض وإعادة تفعيل زرار الصرف للموظف «${selectedBarberForVoucher.barber.name}»`);
                       setVoucherModalOpen(false);
                     }}
                   >
@@ -646,6 +648,22 @@ export function AdminPayroll({
                       const res = await executeReceiptPrint({ allowDialogOnVirtualPrinter: true });
                       const updated = setDisbursedEmployee(selectedBarberForVoucher.barber.id, true, payrollSettings);
                       setDisbursedIds(updated);
+                      if (onAddExpense) {
+                        onAddExpense({
+                          id: `EXP-SALARY-${selectedBarberForVoucher.barber.id}-${Date.now()}`,
+                          amount: selectedBarberForVoucher.net,
+                          category: "رواتب ومستحقات",
+                          description: `صرف راتب الموظف ${selectedBarberForVoucher.barber.name} (${cycleLabelArabic})`,
+                          title: `صرف راتب - ${selectedBarberForVoucher.barber.name}`,
+                          date: new Date().toISOString().slice(0, 10),
+                          time: new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
+                          paymentMethod: "نقد من الدرج",
+                          paymentSource: "خزينة الفرع",
+                          registeredBy: "المدير العام",
+                          shiftDeduction: true,
+                          deductedFromDrawer: true,
+                        });
+                      }
                       onShowToast(res.message);
                       setVoucherModalOpen(false);
                     }}
@@ -660,7 +678,23 @@ export function AdminPayroll({
                     onClick={() => {
                       const updated = setDisbursedEmployee(selectedBarberForVoucher.barber.id, true, payrollSettings);
                       setDisbursedIds(updated);
-                      onShowToast(`تم تسجيل صرف الراتب للموظف «${selectedBarberForVoucher.barber.name}»`);
+                      if (onAddExpense) {
+                        onAddExpense({
+                          id: `EXP-SALARY-${selectedBarberForVoucher.barber.id}-${Date.now()}`,
+                          amount: selectedBarberForVoucher.net,
+                          category: "رواتب ومستحقات",
+                          description: `صرف راتب الموظف ${selectedBarberForVoucher.barber.name} (${cycleLabelArabic})`,
+                          title: `صرف راتب - ${selectedBarberForVoucher.barber.name}`,
+                          date: new Date().toISOString().slice(0, 10),
+                          time: new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
+                          paymentMethod: "نقد من الدرج",
+                          paymentSource: "خزينة الفرع",
+                          registeredBy: "المدير العام",
+                          shiftDeduction: true,
+                          deductedFromDrawer: true,
+                        });
+                      }
+                      onShowToast(`تم تسجيل صرف الراتب للموظف «${selectedBarberForVoucher.barber.name}» وتسجيل المصروف`);
                       setVoucherModalOpen(false);
                     }}
                   >

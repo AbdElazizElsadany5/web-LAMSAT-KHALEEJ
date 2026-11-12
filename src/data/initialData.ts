@@ -497,7 +497,10 @@ export const initialShift: ShiftRecord = {
   cashierName: "حسام حسن",
   openTime: "09:00 ص",
   startTime: "09:00 ص",
-  status: "نشطة",
+  closeTime: "09:00 م",
+  endTime: "09:00 م",
+  durationText: "12 ساعة (مغلقة)",
+  status: "مغلقة",
   openingCash: 1500,
   initialCash: 1500,
   cashSales: 2750,
@@ -512,6 +515,8 @@ export const initialShift: ShiftRecord = {
   refunds: 0,
   expectedCash: 3820,
   expectedDrawerCash: 3820,
+  actualCash: 3820,
+  difference: 0,
   invoiceCount: 22,
 };
 

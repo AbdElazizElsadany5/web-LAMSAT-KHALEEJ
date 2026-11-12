@@ -62,6 +62,7 @@ export function AdminPage({
   onSaveEmployee,
   onAddExpense,
   onCloseShift,
+  onDeleteShift,
   onSaveSettings,
   onAddAdvance,
   onEditAdvance,
@@ -98,6 +99,7 @@ export function AdminPage({
   onDeleteEmployee?: (barberId: string) => void;
   onAddExpense: (expense: ExpenseRecord) => void;
   onCloseShift: (shiftId: number, actualCash: number, notes: string) => void;
+  onDeleteShift?: (shiftId: number) => void;
   onSaveSettings: (settings: Record<string, string>) => void;
   onAddAdvance?: (advance: AdvanceRecord) => void;
   onEditAdvance?: (advance: AdvanceRecord) => void;
@@ -220,6 +222,7 @@ export function AdminPage({
           advances={advances}
           attendanceRecords={attendanceRecords}
           onShowToast={showToast}
+          onAddExpense={onAddExpense}
         />
       )}
 
@@ -234,6 +237,7 @@ export function AdminPage({
         <AdminShifts
           shifts={shifts}
           onCloseShift={onCloseShift}
+          onDeleteShift={onDeleteShift}
           onShowToast={showToast}
           invoices={invoices}
         />

@@ -525,46 +525,6 @@ export function PosPage({
             <span>{isIsolated ? "إلغاء العزل (Esc)" : "عزل الكاشير (F11)"}</span>
           </button>
 
-          {/* F6 Queue Screen Modal Button */}
-          {onOpenQueue && (
-            <button
-              type="button"
-              onClick={onOpenQueue}
-              title="فتح شاشة نداء الدور وصالة الانتظار للعملاء (اضغط F6)"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "5px 12px",
-                borderRadius: 8,
-                border: "1px solid var(--border-gold)",
-                background: "var(--gold-soft)",
-                color: "var(--light-gold)",
-                fontSize: 12.5,
-                fontWeight: 800,
-                cursor: "pointer",
-                transition: "all 0.18s ease",
-              }}
-            >
-              <span
-                style={{
-                  background: "var(--card)",
-                  padding: "1px 6px",
-                  borderRadius: 4,
-                  fontSize: 11,
-                  fontFamily: "Inter",
-                  border: "1px solid var(--border)",
-                  color: "var(--gold)",
-                  fontWeight: 900,
-                }}
-              >
-                F6
-              </span>
-              <Icon name="users" size={14} />
-              <span>شاشة الدور</span>
-            </button>
-          )}
-
           {/* Dedicated Cash Out Button Requested by User */}
           <button
             type="button"
