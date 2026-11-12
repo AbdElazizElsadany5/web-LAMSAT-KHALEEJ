@@ -193,7 +193,7 @@ export function QueueScreenModal({
           display: "flex",
           flexDirection: "column",
           padding: 0,
-          background: "#0E0E0E",
+          background: "var(--surface-deep)",
           overflow: "hidden",
         }}
       >
@@ -219,8 +219,8 @@ export function QueueScreenModal({
           >
             <div
               style={{
-                background: "linear-gradient(145deg, #1A1712, #241D12)",
-                border: "2px solid #D4AF37",
+                background: "var(--card)",
+                border: "2px solid var(--gold)",
                 borderRadius: 24,
                 padding: "48px 64px",
                 textAlign: "center",
@@ -229,15 +229,15 @@ export function QueueScreenModal({
                 width: "90%",
               }}
             >
-              <div style={{ color: "#F5C242", fontSize: 18, fontWeight: 700, letterSpacing: 2, marginBottom: 12 }}>
-                🔔 نداء العميل القادم • صالون لمسة خليجي
+              <div style={{ color: "var(--light-gold)", fontSize: 18, fontWeight: 700, letterSpacing: 2, marginBottom: 12 }}>
+                نداء العميل القادم • صالون لمسة خليجي
               </div>
-              <div style={{ fontSize: 16, color: "#AAA", marginBottom: 16 }}>تذكرة رقم</div>
+              <div style={{ fontSize: 16, color: "var(--text-secondary)", marginBottom: 16 }}>تذكرة رقم</div>
               <div
                 style={{
                   fontSize: 84,
                   fontWeight: 900,
-                  color: "#D4AF37",
+                  color: "var(--gold)",
                   fontFamily: "Inter",
                   lineHeight: 1,
                   textShadow: "0 0 30px rgba(212,175,55,0.4)",
@@ -246,11 +246,11 @@ export function QueueScreenModal({
               >
                 #{calledTicket.ticket}
               </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: "#FFFFFF", marginBottom: 10 }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "var(--text)", marginBottom: 10 }}>
                 تفضل إلى كرسي رقم ({calledTicket.chair})
               </div>
-              <div style={{ fontSize: 18, color: "#B8B8B8", marginBottom: 28 }}>
-                مع الحلاق: <strong style={{ color: "#F5C242" }}>{calledTicket.barber}</strong>
+              <div style={{ fontSize: 18, color: "var(--text-secondary)", marginBottom: 28 }}>
+                مع الحلاق: <strong style={{ color: "var(--light-gold)" }}>{calledTicket.barber}</strong>
               </div>
               <button
                 className="primary-btn"
@@ -268,8 +268,8 @@ export function QueueScreenModal({
         <div
           style={{
             height: 60,
-            background: "#141414",
-            borderBottom: "1px solid #2A2418",
+            background: "var(--card)",
+            borderBottom: "1px solid var(--border)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -284,20 +284,20 @@ export function QueueScreenModal({
                 height: 38,
                 borderRadius: 10,
                 background: "rgba(212,175,55,0.15)",
-                border: "1px solid #D4AF37",
+                border: "1px solid var(--gold)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#D4AF37",
+                color: "var(--gold)",
               }}
             >
               <Icon name="scissors" size={20} />
             </div>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: "#FFFFFF" }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: "var(--text)" }}>
                 لمسة خليجي — شاشة نداء الدور وصالة الانتظار
               </div>
-              <div style={{ fontSize: 11, color: "#888" }}>
+              <div style={{ fontSize: 11, color: "var(--muted)" }}>
                 نظام إدارة الطوابير والشاشات الذكية لشاشات التلفزيون وصالة الاستقبال
               </div>
             </div>
@@ -343,7 +343,7 @@ export function QueueScreenModal({
             gap: 16,
             padding: 20,
             overflow: "hidden",
-            background: "#0B0B0B",
+            background: "var(--bg)",
           }}
         >
           {/* Right Column: Barber Chairs & Active Services */}
@@ -358,13 +358,13 @@ export function QueueScreenModal({
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Icon name="crown" size={18} style={{ color: "#D4AF37" } as React.CSSProperties} />
-                <h3 style={{ fontSize: 18, fontWeight: 800, color: "#FFFFFF", margin: 0 }}>
+                <Icon name="crown" size={18} style={{ color: "var(--gold)" } as React.CSSProperties} />
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: "var(--text)", margin: 0 }}>
                   كراسي الحلاقة والخدمة الحالية ({barbers.length} كراسي)
                 </h3>
               </div>
-              <span style={{ fontSize: 12, color: "#888" }}>
-                العملاء قيد الخدمة: <strong style={{ color: "#3FB950" }}>{inServiceList.length}</strong>
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                العملاء قيد الخدمة: <strong style={{ color: "var(--success-text)" }}>{inServiceList.length}</strong>
               </span>
             </div>
 
@@ -377,9 +377,9 @@ export function QueueScreenModal({
                   <div
                     key={b.id}
                     style={{
-                      background: "#141414",
+                      background: "var(--card)",
                       borderRadius: 14,
-                      border: activeCust ? "1px solid #D4AF37" : "1px solid #2A2418",
+                      border: activeCust ? "1px solid var(--gold)" : "1px solid var(--border)",
                       padding: 18,
                       display: "flex",
                       flexDirection: "column",
@@ -396,8 +396,8 @@ export function QueueScreenModal({
                             width: 36,
                             height: 36,
                             borderRadius: 10,
-                            background: activeCust ? "linear-gradient(135deg, #D4AF37, #F5C242)" : "#222",
-                            color: activeCust ? "#0B0B0B" : "#888",
+                            background: activeCust ? "linear-gradient(135deg, #D4AF37, #F5C242)" : "var(--surface-soft)",
+                            color: activeCust ? "#0B0B0B" : "var(--muted)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -409,10 +409,10 @@ export function QueueScreenModal({
                           {chairNum}
                         </div>
                         <div>
-                          <div style={{ fontSize: 15, fontWeight: 800, color: "#FFF" }}>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>
                             كرسي #{chairNum} — {b.name}
                           </div>
-                          <div style={{ fontSize: 12, color: "#888" }}>{b.title}</div>
+                          <div style={{ fontSize: 12, color: "var(--muted)" }}>{b.title}</div>
                         </div>
                       </div>
 
@@ -420,8 +420,8 @@ export function QueueScreenModal({
                         className="status-pill"
                         style={{
                           background: activeCust ? "rgba(255, 159, 28, 0.15)" : "rgba(63, 185, 80, 0.15)",
-                          color: activeCust ? "#FF9F1C" : "#3FB950",
-                          border: `1px solid ${activeCust ? "#FF9F1C40" : "#3FB95040"}`,
+                          color: activeCust ? "var(--warning-text)" : "var(--success-text)",
+                          border: `1px solid ${activeCust ? "var(--warning-border)" : "var(--success-border)"}`,
                           fontSize: 11,
                           padding: "2px 8px",
                         }}
@@ -434,30 +434,30 @@ export function QueueScreenModal({
                     {activeCust ? (
                       <div
                         style={{
-                          background: "#1A1712",
-                          border: "1px dashed #D4AF37",
+                          background: "var(--gold-soft)",
+                          border: "1px dashed var(--gold)",
                           borderRadius: 10,
                           padding: 12,
                           marginBottom: 12,
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                          <span style={{ fontSize: 12, color: "#B8B8B8" }}>العميل الحالي:</span>
+                          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>العميل الحالي:</span>
                           <span
                             style={{
                               fontSize: 18,
                               fontWeight: 900,
-                              color: "#F5C242",
+                              color: "var(--light-gold)",
                               fontFamily: "Inter",
                             }}
                           >
                             تذكرة #{activeCust.ticketNumber}
                           </span>
                         </div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF", marginBottom: 4 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
                           {activeCust.customerName}
                         </div>
-                        <div style={{ fontSize: 12, color: "#D4AF37", display: "flex", alignItems: "center", gap: 4 }}>
+                        <div style={{ fontSize: 12, color: "var(--gold)", display: "flex", alignItems: "center", gap: 4 }}>
                           <Icon name="scissors" size={13} />
                           <span>{activeCust.serviceRequested}</span>
                         </div>
@@ -465,12 +465,12 @@ export function QueueScreenModal({
                     ) : (
                       <div
                         style={{
-                          background: "#181818",
+                          background: "var(--surface-soft)",
                           borderRadius: 10,
                           padding: "24px 12px",
                           textAlign: "center",
                           marginBottom: 12,
-                          color: "#666",
+                          color: "var(--subtle)",
                           fontSize: 13,
                         }}
                       >
@@ -501,9 +501,9 @@ export function QueueScreenModal({
           {/* Left Column: Waiting Queue */}
           <div
             style={{
-              background: "#141414",
+              background: "var(--card)",
               borderRadius: 14,
-              border: "1px solid #2A2418",
+              border: "1px solid var(--border)",
               padding: 18,
               display: "flex",
               flexDirection: "column",
@@ -512,12 +512,12 @@ export function QueueScreenModal({
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Icon name="clock" size={18} style={{ color: "#FF9F1C" } as React.CSSProperties} />
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: "#FFFFFF", margin: 0 }}>
+                <Icon name="clock" size={18} style={{ color: "var(--warning-text)" } as React.CSSProperties} />
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", margin: 0 }}>
                   قائمة الانتظار في الصالة ({waitingList.length})
                 </h3>
               </div>
-              <span style={{ fontSize: 11, color: "#888" }}>تقدير الانتظار: ~15 د/عميل</span>
+              <span style={{ fontSize: 11, color: "var(--muted)" }}>تقدير الانتظار: ~15 د/عميل</span>
             </div>
 
             {/* Waiting List Cards */}
@@ -532,18 +532,18 @@ export function QueueScreenModal({
               }}
             >
               {waitingList.length === 0 ? (
-                <div style={{ textAlign: "center", color: "#666", padding: "40px 10px" }}>
-                  <Icon name="check" size={32} style={{ color: "#3FB950", margin: "0 auto 10px", display: "block" }} />
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#AAA" }}>لا يوجد عملاء في الانتظار</div>
-                  <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>جميع الكراسي جاهزة لاستقبال الزوار الجدد</div>
+                <div style={{ textAlign: "center", color: "var(--subtle)", padding: "40px 10px" }}>
+                  <Icon name="check" size={32} style={{ color: "var(--success-text)", margin: "0 auto 10px", display: "block" }} />
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-secondary)" }}>لا يوجد عملاء في الانتظار</div>
+                  <div style={{ fontSize: 12, color: "var(--subtle)", marginTop: 4 }}>جميع الكراسي جاهزة لاستقبال الزوار الجدد</div>
                 </div>
               ) : (
                 waitingList.map((item, qIdx) => (
                   <div
                     key={item.ticketNumber}
                     style={{
-                      background: "#1C1C1C",
-                      border: "1px solid #2A2418",
+                      background: "var(--surface-soft)",
+                      border: "1px solid var(--border)",
                       borderRadius: 10,
                       padding: "12px 14px",
                       display: "flex",
@@ -559,12 +559,12 @@ export function QueueScreenModal({
                           height: 42,
                           borderRadius: 8,
                           background: "rgba(212,175,55,0.12)",
-                          border: "1px solid #D4AF37",
+                          border: "1px solid var(--gold)",
                           display: "flex",
                           flexDirection: "column",
                           alignItems: "center",
                           justifyContent: "center",
-                          color: "#F5C242",
+                          color: "var(--light-gold)",
                           fontFamily: "Inter",
                           fontWeight: 900,
                           fontSize: 16,
@@ -575,13 +575,13 @@ export function QueueScreenModal({
                       </div>
 
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#FFF" }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>
                           {item.customerName}
                         </div>
-                        <div style={{ fontSize: 11, color: "#D4AF37", marginTop: 2 }}>
+                        <div style={{ fontSize: 11, color: "var(--gold)", marginTop: 2 }}>
                           {item.serviceRequested}
                         </div>
-                        <div style={{ fontSize: 10, color: "#777", marginTop: 2 }}>
+                        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
                           تسجيل: {item.timeIn} {item.preferredBarberId && `• يفضل حلاق محدد`}
                         </div>
                       </div>
@@ -591,7 +591,7 @@ export function QueueScreenModal({
                       <span
                         style={{
                           background: "rgba(255,159,28,0.12)",
-                          color: "#FF9F1C",
+                          color: "var(--warning-text)",
                           padding: "2px 8px",
                           borderRadius: 6,
                           fontSize: 11,
@@ -601,7 +601,7 @@ export function QueueScreenModal({
                       >
                         الدور #{qIdx + 1}
                       </span>
-                      <div style={{ fontSize: 10, color: "#888", marginTop: 4 }}>
+                      <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
                         ~{item.estimatedWaitMinutes} دقيقة
                       </div>
                     </div>
@@ -617,16 +617,16 @@ export function QueueScreenModal({
                 style={{
                   marginTop: 12,
                   padding: 14,
-                  background: "#181818",
+                  background: "var(--surface-soft)",
                   borderRadius: 10,
-                  border: "1px solid #D4AF37",
+                  border: "1px solid var(--gold)",
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#F5C242", marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "var(--light-gold)", marginBottom: 10 }}>
                   تسجيل عميل جديد في قائمة الانتظار
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                <div style={{ marginBottom: 8 }}>
                   <input
                     type="text"
                     className="form-input"
@@ -635,13 +635,6 @@ export function QueueScreenModal({
                     onChange={(e) => setNewCustomerName(e.target.value)}
                     autoFocus
                     required
-                  />
-                  <input
-                    type="tel"
-                    className="form-input"
-                    placeholder="رقم الجوال (اختياري)"
-                    value={newCustomerPhone}
-                    onChange={(e) => setNewCustomerPhone(e.target.value)}
                   />
                 </div>
 
@@ -697,8 +690,8 @@ export function QueueScreenModal({
                   width: "100%",
                   fontSize: 13,
                   fontWeight: 700,
-                  border: "1px dashed #D4AF37",
-                  color: "#D4AF37",
+                  border: "1px dashed var(--gold)",
+                  color: "var(--gold)",
                 }}
               >
                 <Icon name="plus" size={15} />

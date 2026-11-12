@@ -50,7 +50,12 @@ export type IconName =
   | "crown"
   | "sparkles"
   | "volume"
-  | "volumeX";
+  | "volumeX"
+  | "sun"
+  | "moon"
+  | "maximize"
+  | "minimize"
+  | "send";
 
 const iconPaths: Record<IconName, React.ReactNode> = {
   grid: (
@@ -303,6 +308,27 @@ const iconPaths: Record<IconName, React.ReactNode> = {
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
       <line x1="22" y1="9" x2="16" y2="15" />
       <line x1="16" y1="9" x2="22" y2="15" />
+    </>
+  ),
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+    </>
+  ),
+  moon: (
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+  ),
+  maximize: (
+    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+  ),
+  minimize: (
+    <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+  ),
+  send: (
+    <>
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
     </>
   ),
 };

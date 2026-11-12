@@ -5,19 +5,20 @@ import {
   Barber,
   ServiceItem,
   Invoice,
-  Coupon,
   ExpenseRecord,
   ShiftRecord,
   AuditLog,
   InventoryProduct,
   CartItem,
+  HeldOrder,
   AdvanceRecord,
+  AttendanceRecord,
+  CashOutPayload,
 } from "./types";
 import {
   initialBarbers,
   initialServices,
   initialInvoices,
-  initialCoupons,
   initialExpenses,
   initialShift,
   initialAuditLogs,
@@ -27,32 +28,94 @@ import {
 } from "./data/initialData";
 import { Icon, IconName } from "./components/Icons";
 import { DesktopTitlebar } from "./components/DesktopTitlebar";
-import { LoginScreen } from "./components/LoginScreen";
+import { ShiftStartScreen } from "./components/ShiftStartScreen";
+import { AdminPasswordGate } from "./components/AdminPasswordGate";
 import { PosPage } from "./components/PosPage";
 import { PaymentModal } from "./components/PaymentModal";
 import { AttendancePage } from "./components/AttendancePage";
-import { InvoicesPage } from "./components/InvoicesPage";
-import { ServicesPage } from "./components/ServicesPage";
-import { InventoryPage } from "./components/InventoryPage";
-import { AdminPage } from "./components/AdminPage";
+import { AdminPage, ADMIN_SECTIONS } from "./components/AdminPage";
 import { QueueScreenModal } from "./components/QueueScreenModal";
+import { CustomerInvoiceView } from "./components/CustomerInvoiceView";
+import { decodeInvoiceFromQrUrl } from "./utils/qrInvoiceHelper";
 import { sfx } from "./utils/audio";
 import { secureStorage } from "./utils/secureStorage";
 import { getSalonSettings, saveSalonSettings, SalonSettings } from "./utils/salonSettings";
+import { applyThemeMode, getThemeMode, saveThemeMode, ThemeMode } from "./utils/themeSettings";
+import {
+  getAttendancePolicy,
+  calculateLateMetrics,
+  parseTimeToMinutes,
+} from "./utils/attendancePolicy";
+import {
+  sendTelegramInvoice,
+  sendTelegramShiftStart,
+  sendTelegramShiftClose,
+  sendTelegramAttendance,
+  sendTelegramAdvance,
+  sendTelegramCashOut,
+  sendTelegramHourlyDigest,
+  getTelegramSettings,
+} from "./utils/telegramSettings";
+
+type ActiveShiftSession = {
+  shiftId: number;
+  cashierName: string;
+  startTimestamp: number;
+  openingCash: number;
+};
+
+function formatShiftDuration(totalSeconds: number): string {
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  return [hrs, mins, secs].map((v) => String(v).padStart(2, "0")).join(":");
+}
 
 export default function App() {
-  // Authentication & Session
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUserRole, setCurrentUserRole] = useState<UserRole>("admin");
-  const [currentUsername, setCurrentUsername] = useState("كريم عادل");
+  // Shift & Admin Gate Session
+  const [activeShiftSession, setActiveShiftSession] = useState<ActiveShiftSession | null>(() =>
+    secureStorage.getItem<ActiveShiftSession | null>("pos_active_shift_session", null)
+  );
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+  const [adminPassword, setAdminPassword] = useState<string>(() =>
+    secureStorage.getItem<string>("pos_admin_password", "admin123")
+  );
+  const [shiftElapsedSeconds, setShiftElapsedSeconds] = useState<number>(() =>
+    activeShiftSession ? Math.max(0, Math.floor((Date.now() - activeShiftSession.startTimestamp) / 1000)) : 0
+  );
+  const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
+
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [lockPin, setLockPin] = useState("");
   const [isMuted, setIsMuted] = useState(false);
   const [showQueueModal, setShowQueueModal] = useState(false);
 
+  const currentUserRole: UserRole = isAdminUnlocked ? "admin" : "cashier";
+  const currentUsername = activeShiftSession?.cashierName || "مسؤول الوردية";
+
   // Navigation State
   const [currentPage, setCurrentPage] = useState<Page>("pos");
+  const [adminSection, setAdminSection] = useState<string>("نظرة عامة");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getThemeMode);
+
+  // Auto-dismiss open modals when switching between pages
+  useEffect(() => {
+    setShowQueueModal(false);
+  }, [currentPage]);
+
+  useEffect(() => {
+    applyThemeMode(themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    const syncTheme = (e: Event) => {
+      const detail = (e as CustomEvent<ThemeMode>).detail;
+      setThemeMode(detail || getThemeMode());
+    };
+    window.addEventListener("app-theme-changed", syncTheme);
+    return () => window.removeEventListener("app-theme-changed", syncTheme);
+  }, []);
 
   // Unified Salon Brand & Settings (Synced & Encrypted)
   const [salonSettings, setSalonSettings] = useState<SalonSettings>(getSalonSettings);
@@ -68,15 +131,14 @@ export default function App() {
   }, []);
 
   // Application Data State with AES-style Encrypted Storage
-  const [services, setServices] = useState<ServiceItem[]>(initialServices);
+  const [services, setServices] = useState<ServiceItem[]>(() =>
+    secureStorage.getItem<ServiceItem[]>("pos_services_data", initialServices)
+  );
   const [barbers, setBarbers] = useState<Barber[]>(() =>
     secureStorage.getItem<Barber[]>("pos_barbers_data", initialBarbers)
   );
   const [invoices, setInvoices] = useState<Invoice[]>(() =>
     secureStorage.getItem<Invoice[]>("pos_invoices_data", initialInvoices)
-  );
-  const [coupons, setCoupons] = useState<Coupon[]>(() =>
-    secureStorage.getItem<Coupon[]>("pos_coupons_data", initialCoupons)
   );
   const [expenses, setExpenses] = useState<ExpenseRecord[]>(() =>
     secureStorage.getItem<ExpenseRecord[]>("pos_expenses_data", initialExpenses)
@@ -90,8 +152,8 @@ export default function App() {
   const [inventory, setInventory] = useState<InventoryProduct[]>(() =>
     secureStorage.getItem<InventoryProduct[]>("pos_inventory_data", initialInventory)
   );
-  const [attendanceRecords, setAttendanceRecords] = useState(() =>
-    secureStorage.getItem("pos_attendance_data", initialAttendance)
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() =>
+    secureStorage.getItem<AttendanceRecord[]>("pos_attendance_data", initialAttendance)
   );
   const [advances, setAdvances] = useState<AdvanceRecord[]>(() =>
     secureStorage.getItem<AdvanceRecord[]>("pos_advances_data", initialAdvances)
@@ -99,16 +161,16 @@ export default function App() {
 
   // Background Auto-Save with Secure Encryption
   useEffect(() => {
+    secureStorage.setItem("pos_services_data", services);
+  }, [services]);
+
+  useEffect(() => {
     secureStorage.setItem("pos_barbers_data", barbers);
   }, [barbers]);
 
   useEffect(() => {
     secureStorage.setItem("pos_invoices_data", invoices);
   }, [invoices]);
-
-  useEffect(() => {
-    secureStorage.setItem("pos_coupons_data", coupons);
-  }, [coupons]);
 
   useEffect(() => {
     secureStorage.setItem("pos_expenses_data", expenses);
@@ -138,6 +200,20 @@ export default function App() {
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [pendingCheckoutCart, setPendingCheckoutCart] = useState<CartItem[]>([]);
   const [pendingCheckoutTotal, setPendingCheckoutTotal] = useState(0);
+  const [clearCartSignal, setClearCartSignal] = useState(0);
+  const [isPosIsolated, setIsPosIsolated] = useState(false);
+
+  // Held Orders & Sidebar Quick Action Signals
+  const [heldOrders, setHeldOrders] = useState<HeldOrder[]>(() =>
+    secureStorage.getItem<HeldOrder[]>("pos_held_orders_data", [])
+  );
+
+  useEffect(() => {
+    secureStorage.setItem("pos_held_orders_data", heldOrders);
+  }, [heldOrders]);
+  const [openPendingSignal, setOpenPendingSignal] = useState(0);
+  const [openAdvanceSignal, setOpenAdvanceSignal] = useState(0);
+  const [openCashOutSignal, setOpenCashOutSignal] = useState(0);
 
   // Global Toast
   const [globalToast, setGlobalToast] = useState("");
@@ -175,49 +251,135 @@ export default function App() {
     setAuditLogs((prev) => [newLog, ...prev]);
   };
 
-  // Login handler
-  const handleLogin = (role: UserRole, username: string, matchedBarber?: Barber) => {
-    setCurrentUserRole(role);
-    if (role === "admin") {
-      setCurrentUsername("كريم عادل (المدير العام)");
-      setCurrentPage("pos");
-    } else if (role === "cashier") {
-      setCurrentUsername("حسام حسن (كاشير)");
-      setCurrentPage("pos");
+  useEffect(() => {
+    if (activeShiftSession) {
+      secureStorage.setItem("pos_active_shift_session", activeShiftSession);
     } else {
-      const empName = matchedBarber ? `${matchedBarber.name} (${matchedBarber.title})` : `${username} (موظف)`;
-      setCurrentUsername(empName);
-      setCurrentPage("attendance");
+      secureStorage.removeItem("pos_active_shift_session");
     }
-    setIsLoggedIn(true);
+  }, [activeShiftSession]);
+
+  useEffect(() => {
+    if (!activeShiftSession) {
+      setShiftElapsedSeconds(0);
+      return;
+    }
+    const syncElapsed = () => {
+      setShiftElapsedSeconds(
+        Math.max(0, Math.floor((Date.now() - activeShiftSession.startTimestamp) / 1000)),
+      );
+    };
+    syncElapsed();
+    const timer = window.setInterval(syncElapsed, 1000);
+    return () => window.clearInterval(timer);
+  }, [activeShiftSession]);
+
+  // Hourly Telegram Digest / Summary Interval
+  useEffect(() => {
+    let lastSentHour = -1;
+    const interval = window.setInterval(() => {
+      const now = new Date();
+      const currentHour = now.getHours();
+      // Send once per hour at top of the hour (or on hour change while app is active)
+      if (currentHour !== lastSentHour && now.getMinutes() >= 0) {
+        lastSentHour = currentHour;
+        const config = getTelegramSettings();
+        if (config.enabled && config.notifyHourly && activeShiftSession) {
+          const hourFormatted = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+          const currentShift = shifts.find((s) => s.status === "نشطة");
+          const drawerCash =
+            (currentShift?.openingCash || 0) + (currentShift?.cashSales || 0) - (currentShift?.drawerExpenses || 0);
+          const totalToday = invoices.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+
+          sendTelegramHourlyDigest({
+            hourStr: hourFormatted,
+            hourlyCount: Math.min(invoices.length, 5),
+            hourlyRevenue: Math.round(totalToday / Math.max(1, currentHour || 1)),
+            totalToday,
+            cashInDrawer: drawerCash,
+          });
+        }
+      }
+    }, 60000);
+
+    return () => window.clearInterval(interval);
+  }, [invoices, shifts, activeShiftSession]);
+
+  // Start Shift handler (replaces Login)
+  const handleStartShift = (cashierName: string, openingCash: number) => {
+    const now = Date.now();
+    const timeStr = new Date(now).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+    const nextShiftId = Math.max(104, ...shifts.map((s) => s.id)) + 1;
+
+    const newShift: ShiftRecord = {
+      id: nextShiftId,
+      cashierName,
+      openTime: timeStr,
+      startTime: timeStr,
+      startTimestamp: now,
+      startDate: new Date(now).toLocaleDateString("ar-EG", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+      openingCash,
+      initialCash: openingCash,
+      cashSales: 0,
+      cardSales: 0,
+      instaPaySales: 0,
+      instapaySales: 0,
+      totalSales: 0,
+      invoiceCount: 0,
+      drawerExpenses: 0,
+      cashExpenses: 0,
+      deposits: 0,
+      withdrawals: 0,
+      refunds: 0,
+      expectedCash: openingCash,
+      expectedDrawerCash: openingCash,
+      status: "نشطة",
+    };
+
+    setShifts((prev) => [
+      newShift,
+      ...prev.map((s) =>
+        s.status === "نشطة"
+          ? {
+              ...s,
+              status: "مغلقة" as const,
+              closeTime: s.closeTime || timeStr,
+            }
+          : s,
+      ),
+    ]);
+
+    setActiveShiftSession({
+      shiftId: nextShiftId,
+      cashierName,
+      startTimestamp: now,
+      openingCash,
+    });
+    setIsAdminUnlocked(false);
     setIsScreenLocked(false);
+    setCurrentPage("pos");
+    sfx.playClick();
+    showToast(`تم بدء الوردية #${nextShiftId} باسم ${cashierName}`);
+    sendTelegramShiftStart(nextShiftId, cashierName, timeStr);
+
+    const newLog: AuditLog = {
+      id: `LOG-${Math.floor(100 + Math.random() * 900)}`,
+      user: cashierName,
+      action: `بدء وردية عمل جديدة #${nextShiftId}`,
+      category: "بيع",
+      timestamp: new Date(now).toISOString().replace("T", " ").slice(0, 19),
+      previousValue: "—",
+      newValue: `افتتاحي: ${openingCash} ج.م`,
+      reason: "فتح وردية من الشاشة الرئيسية",
+      severity: "عادي",
+    };
+    setAuditLogs((prev) => [newLog, ...prev]);
   };
-
-  // Logout handler
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setIsScreenLocked(false);
-  };
-
-  // Navigation Items allowed per role
-  const navItems = useMemo(() => {
-    const allNav: { id: Page; label: string; icon: IconName; shortcut?: string }[] = [
-      { id: "pos", label: "الكاشير", icon: "grid", shortcut: "F1" },
-      { id: "attendance", label: "الحضور", icon: "clock" },
-      { id: "invoices", label: "الفواتير", icon: "receipt" },
-      { id: "services", label: "الخدمات", icon: "scissors" },
-      { id: "inventory", label: "المشتريات", icon: "box" },
-      { id: "admin", label: "الأدمن", icon: "shield" },
-    ];
-
-    if (currentUserRole === "employee") {
-      return [{ id: "attendance" as Page, label: "صفحة الموظف", icon: "clock" as IconName }];
-    }
-    if (currentUserRole === "cashier") {
-      return allNav.filter((n) => n.id === "pos" || n.id === "attendance" || n.id === "invoices" || n.id === "inventory");
-    }
-    return allNav;
-  }, [currentUserRole]);
 
   // Handle Checkout Open from POS
   const handleOpenCheckout = (cart: CartItem[], total: number) => {
@@ -229,6 +391,7 @@ export default function App() {
   // Handle Payment Complete
   const handlePaymentSuccess = (newInvoice: Invoice) => {
     setInvoices((prev) => [newInvoice, ...prev]);
+    setClearCartSignal((s) => s + 1);
     // update shift cash
     setShifts((prev) => {
       const active = prev.find((s) => s.status === "نشطة");
@@ -250,6 +413,7 @@ export default function App() {
               cashSales: newCash,
               cardSales: newCard,
               expectedCash: s.openingCash + newCash - s.drawerExpenses,
+              expectedDrawerCash: s.openingCash + newCash - s.drawerExpenses,
             }
           : s,
       );
@@ -263,54 +427,170 @@ export default function App() {
       "",
       "عادي",
     );
+    sendTelegramInvoice(newInvoice, activeShiftSession?.cashierName);
   };
 
   // Barber Status Update (Punch in/out/break)
+  // Update Barber Attendance & Automatic Late Deduction Calculation
   const handleUpdateBarberStatus = (barberId: string, newStatus: Barber["status"], timeStr: string) => {
+    const targetBarber = barbers.find((x) => x.id === barberId);
+    if (!targetBarber) return;
+
+    const isFreshCheckIn =
+      newStatus === "متاح" && (targetBarber.status === "غير حاضر" || targetBarber.status === "منصرف");
+    const policy = getAttendancePolicy();
+    const scheduledTime = targetBarber.scheduledStartTime || policy.defaultScheduledTime;
+    const nowDate = new Date();
+    const todayDateStr = nowDate.toLocaleDateString("ar-EG", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+
+    const lateMetrics = isFreshCheckIn
+      ? calculateLateMetrics(scheduledTime, nowDate, policy)
+      : { lateMinutes: 0, lateDeduction: 0 };
+
     setBarbers((prev) =>
-      prev.map((b) =>
-        b.id === barberId
-          ? {
-              ...b,
-              status: newStatus,
-              checkInTime: newStatus === "متاح" && b.checkInTime === "—" ? timeStr : b.checkInTime,
-              checkOutTime: newStatus === "منصرف" ? timeStr : b.checkOutTime,
-            }
-          : b,
-      ),
+      prev.map((b) => {
+        if (b.id !== barberId) return b;
+        return {
+          ...b,
+          status: newStatus,
+          checkInTime: isFreshCheckIn ? timeStr : b.checkInTime,
+          checkOutTime: isFreshCheckIn ? "—" : newStatus === "منصرف" ? timeStr : b.checkOutTime,
+        };
+      }),
     );
 
-    const b = barbers.find((x) => x.id === barberId);
-    if (b) {
+    const recordStatus: AttendanceRecord["status"] =
+      newStatus === "في استراحة"
+        ? "في استراحة"
+        : newStatus === "منصرف"
+          ? "منصرف"
+          : newStatus === "غير حاضر"
+            ? "لم يحضر"
+            : "حاضر";
+
+    setAttendanceRecords((prev) => {
+      const todayIdx = prev.findIndex(
+        (r) => r.barberId === barberId && r.date === todayDateStr
+      );
+
+      if (isFreshCheckIn) {
+        const newRec: AttendanceRecord = {
+          id: `att-${Date.now()}`,
+          barberId,
+          barberName: targetBarber.name,
+          date: todayDateStr,
+          scheduledTime,
+          checkIn: timeStr,
+          checkOut: "—",
+          status: "حاضر",
+          hoursWorked: 0,
+          workingHours: 0,
+          lateMinutes: lateMetrics.lateMinutes,
+          minutesLate: lateMetrics.lateMinutes,
+          lateDeduction: lateMetrics.lateDeduction,
+        };
+        if (todayIdx > -1) {
+          const next = [...prev];
+          next[todayIdx] = newRec;
+          return next;
+        }
+        return [newRec, ...prev];
+      }
+
+      if (todayIdx > -1) {
+        const next = [...prev];
+        const existing = next[todayIdx];
+        let workingHours = existing.workingHours ?? existing.hoursWorked ?? 0;
+        if (newStatus === "منصرف") {
+          const inMins = parseTimeToMinutes(existing.checkIn);
+          const outMins = nowDate.getHours() * 60 + nowDate.getMinutes();
+          if (inMins !== null && outMins >= inMins) {
+            workingHours = Number(((outMins - inMins) / 60).toFixed(1));
+          }
+        }
+        next[todayIdx] = {
+          ...existing,
+          checkOut: newStatus === "منصرف" ? timeStr : existing.checkOut,
+          status: recordStatus,
+          workingHours,
+          hoursWorked: workingHours,
+        };
+        return next;
+      }
+
+      return prev;
+    });
+
+    const lateDesc =
+      isFreshCheckIn && lateMetrics.lateMinutes > 0
+        ? ` — تأخير ${lateMetrics.lateMinutes} دقيقة (خصم ${lateMetrics.lateDeduction} ج.م)`
+        : "";
+
+    addAuditLog(
+      `تحديث حالة الحضور للحلاق ${targetBarber.name}`,
+      "تعديل حضور",
+      targetBarber.status,
+      newStatus,
+      `في تمام الساعة ${timeStr}${lateDesc}`,
+      lateMetrics.lateMinutes > 0 ? "حساس" : "عادي",
+    );
+
+    if (newStatus === "متاح" && isFreshCheckIn) {
+      sendTelegramAttendance(targetBarber.name, "حضور", timeStr, lateMetrics.lateMinutes > 0, lateMetrics.lateMinutes);
+    } else if (newStatus === "منصرف") {
+      sendTelegramAttendance(targetBarber.name, "انصراف", timeStr);
+    }
+  };
+
+  // Admin Updates Next-Day / Scheduled Arrival Time for an Employee
+  const handleUpdateBarberSchedule = (barberId: string, scheduledTime: string) => {
+    const target = barbers.find((b) => b.id === barberId);
+    setBarbers((prev) =>
+      prev.map((b) =>
+        b.id === barberId ? { ...b, scheduledStartTime: scheduledTime } : b
+      )
+    );
+    if (target) {
       addAuditLog(
-        `تحديث حالة الحضور للحلاق ${b.name}`,
+        `تحديد ميعاد حضور الغد للموظف ${target.name}`,
         "تعديل حضور",
-        b.status,
-        newStatus,
-        `في تمام الساعة ${timeStr}`,
+        target.scheduledStartTime || "09:00",
+        scheduledTime,
+        "تحديد موعد الحضور لليوم التالي بواسطة الإدارة",
         "عادي",
       );
     }
   };
 
-  // Admin Attendance Correction
+  // Admin Attendance Correction (recalculates delay & deduction cleanly)
   const handleAdminCorrectAttendance = (
     recordId: string,
     newCheckIn: string,
     newCheckOut: string,
     reason: string,
   ) => {
+    const policy = getAttendancePolicy();
     setAttendanceRecords((prev) =>
-      prev.map((r) =>
-        r.id === recordId
-          ? {
-              ...r,
-              checkIn: newCheckIn,
-              checkOut: newCheckOut,
-              correctionNote: reason,
-            }
-          : r,
-      ),
+      prev.map((r) => {
+        if (r.id !== recordId) return r;
+        const linkedBarber = barbers.find((b) => b.id === r.barberId);
+        const sched = r.scheduledTime || linkedBarber?.scheduledStartTime || policy.defaultScheduledTime;
+        const metrics = calculateLateMetrics(sched, newCheckIn, policy);
+        return {
+          ...r,
+          scheduledTime: sched,
+          checkIn: newCheckIn,
+          checkOut: newCheckOut,
+          lateMinutes: metrics.lateMinutes,
+          minutesLate: metrics.lateMinutes,
+          lateDeduction: metrics.lateDeduction,
+          correctionNote: reason,
+        };
+      }),
     );
     addAuditLog(
       `تصحيح سجل حضور ${recordId}`,
@@ -332,6 +612,12 @@ export default function App() {
       `${newAdvance.amount} ج.م (${newAdvance.reason})`,
       `المسجل: ${newAdvance.registeredBy} (${newAdvance.registeredByRole})`,
       "حساس"
+    );
+    sendTelegramAdvance(
+      newAdvance.barberName,
+      newAdvance.amount,
+      newAdvance.reason,
+      newAdvance.registeredBy || "الكاشير",
     );
   };
 
@@ -362,6 +648,93 @@ export default function App() {
         "حرج"
       );
     }
+  };
+
+  // Cash Out Handler (خروج وصرف نقدية من الدرج)
+  const handleCashOut = async (payload: CashOutPayload) => {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("ar-EG", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const timeStr = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+    const activeShift = shifts.find((s) => s.status === "نشطة");
+    const shiftId = activeShift ? activeShift.id : (activeShiftSession?.shiftId || 104);
+
+    // 1. Deduct immediately from active shift drawer cash
+    setShifts((prev) =>
+      prev.map((s) =>
+        s.status === "نشطة"
+          ? {
+              ...s,
+              drawerExpenses: (s.drawerExpenses || 0) + payload.amount,
+              cashExpenses: ((s.cashExpenses ?? s.drawerExpenses) || 0) + payload.amount,
+              expectedCash: (s.expectedCash || 0) - payload.amount,
+              expectedDrawerCash: ((s.expectedDrawerCash ?? s.expectedCash) || 0) - payload.amount,
+            }
+          : s
+      )
+    );
+
+    // 2. If employee advance: also record as AdvanceRecord for payroll deduction
+    if (payload.category === "سلفة موظف") {
+      const targetBarber = barbers.find((b) => b.id === payload.barberId || b.name === payload.recipient);
+      const newAdvance: AdvanceRecord = {
+        id: `ADV-${Date.now()}`,
+        barberId: targetBarber?.id || payload.barberId || "unknown",
+        barberName: targetBarber?.name || payload.recipient,
+        amount: payload.amount,
+        reason: payload.reason,
+        date: dateStr,
+        time: timeStr,
+        registeredBy: activeShiftSession?.cashierName || "الكاشير",
+        registeredByRole: "cashier",
+        status: "نشط",
+        notes: payload.notes ? `كاشير (درج): ${payload.notes}` : `صرف نقدية من الدرج (وردية #${shiftId})`,
+      };
+      setAdvances((prev) => [newAdvance, ...prev]);
+    } else {
+      // 3. Otherwise: record as ExpenseRecord with shiftDeduction
+      const newExpense: ExpenseRecord = {
+        id: `EXP-${Date.now()}`,
+        category: payload.category === "مسحوبات إدارة" ? "مسحوبات" : "تشغيلية ونثريات",
+        amount: payload.amount,
+        date: dateStr,
+        time: timeStr,
+        paymentMethod: "نقد من الدرج",
+        registeredBy: activeShiftSession?.cashierName || "الكاشير",
+        shiftDeduction: true,
+        deductedFromDrawer: true,
+        description: `${payload.category} — مستلم: ${payload.recipient} — السبب: ${payload.reason}${payload.notes ? ` (${payload.notes})` : ""}`,
+      };
+      setExpenses((prev) => [newExpense, ...prev]);
+    }
+
+    // 4. Record in Audit Log
+    addAuditLog(
+      `خروج نقدية من الدرج (${payload.category}) بمبلغ ${payload.amount} ج.م`,
+      "صرف نقدية",
+      `المستلم: ${payload.recipient}`,
+      `${payload.amount} ج.م (${payload.reason})`,
+      `الكاشير: ${activeShiftSession?.cashierName || "الكاشير"} (وردية #${shiftId})`,
+      "حساس"
+    );
+
+    // 5. Calculate remaining cash in drawer for Telegram
+    const remainingCash =
+      (activeShift?.openingCash || 0) +
+      (activeShift?.cashSales || 0) -
+      ((activeShift?.drawerExpenses || 0) + payload.amount);
+
+    // 6. Send instant Telegram Notification
+    sendTelegramCashOut({
+      amount: payload.amount,
+      category: payload.category,
+      recipient: payload.recipient,
+      reason: payload.reason,
+      cashierName: activeShiftSession?.cashierName || "الكاشير",
+      shiftId: shiftId,
+      remainingCash: Math.max(0, remainingCash),
+    });
+
+    return { ok: true };
   };
 
   // Cancel Invoice
@@ -493,6 +866,34 @@ export default function App() {
     );
   };
 
+  const handleDeleteEmployee = (barberId: string) => {
+    const target = barbers.find((b) => b.id === barberId);
+    setBarbers((prev) => prev.filter((b) => b.id !== barberId));
+    addAuditLog(
+      `حذف الموظف «${target?.name || barberId}» نهائياً من قاعدة البيانات`,
+      "حذف موظف",
+      target?.name || barberId,
+      "—",
+      "إدارة الموظفين",
+      "حرج",
+    );
+    showToast(`تم حذف الموظف «${target?.name || ""}» بنجاح وتحديث قاعدة البيانات`);
+  };
+
+  const handleDeleteProduct = (productId: string) => {
+    const target = inventory.find((p) => p.id === productId);
+    setInventory((prev) => prev.filter((p) => p.id !== productId));
+    addAuditLog(
+      `حذف الصنف «${target?.name || productId}» من المستودع`,
+      "حذف صنف",
+      target?.name || productId,
+      "—",
+      "المستودع والمشتريات",
+      "حرج",
+    );
+    showToast(`تم حذف المنتج «${target?.name || ""}» بنجاح وتحديث المخزون`);
+  };
+
   // Expenses
   const handleAddExpense = (exp: ExpenseRecord) => {
     setExpenses((prev) => [exp, ...prev]);
@@ -503,7 +904,9 @@ export default function App() {
             ? {
                 ...s,
                 drawerExpenses: s.drawerExpenses + exp.amount,
+                cashExpenses: (s.cashExpenses ?? s.drawerExpenses) + exp.amount,
                 expectedCash: s.expectedCash - exp.amount,
+                expectedDrawerCash: (s.expectedDrawerCash ?? s.expectedCash) - exp.amount,
               }
             : s,
         ),
@@ -511,14 +914,26 @@ export default function App() {
     }
   };
 
+  const activeShiftDurationText = formatShiftDuration(shiftElapsedSeconds);
+  const currentActiveShift = shifts.find((s) => s.id === activeShiftSession?.shiftId) || shifts.find((s) => s.status === "نشطة");
+
   // Close Shift
-  const handleCloseShift = (shiftId: number, actualCash: number, notes: string) => {
+  const handleCloseShift = (shiftId: number, actualCash: number, notes: string, durationOverride?: string) => {
+    const durationText = durationOverride || activeShiftDurationText;
     setShifts((prev) =>
       prev.map((s) =>
         s.id === shiftId
           ? {
               ...s,
               closeTime: new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
+              closeDate: new Date().toLocaleDateString("ar-EG", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              }),
+              closeTimestamp: Date.now(),
+              durationText,
               actualCash,
               difference: actualCash - s.expectedCash,
               status: "مغلقة",
@@ -528,43 +943,95 @@ export default function App() {
       ),
     );
     addAuditLog(
-      `إغلاق الوردية #${shiftId} وتسليم الدرج`,
+      `إغلاق الوردية #${shiftId} وتسليم الدرج (المدة: ${durationText})`,
       "إغلاق وردية",
       "نشطة",
       `فعلي: ${actualCash} ج.م`,
-      notes || "إغلاق روتيني وطباعة تقرير Z",
+      notes || "إغلاق الوردية وتسليم العهدة",
       "حرج",
     );
+
+    const targetShift = shifts.find((s) => s.id === shiftId);
+    const totalSales =
+      (targetShift?.cashSales || 0) + (targetShift?.cardSales || 0) + (targetShift?.instaPaySales || 0);
+    sendTelegramShiftClose(
+      shiftId,
+      activeShiftSession?.cashierName || targetShift?.cashierName || "مسؤول الوردية",
+      durationText,
+      actualCash,
+      totalSales,
+    );
+
+    if (activeShiftSession && activeShiftSession.shiftId === shiftId) {
+      setActiveShiftSession(null);
+      setIsAdminUnlocked(false);
+      setIsScreenLocked(false);
+      setCloseShiftModalOpen(false);
+    }
+  };
+
+  const handleOpenCloseShiftModal = () => {
+    setCloseShiftModalOpen(true);
+  };
+
+  const handleConfirmCloseShift = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeShiftSession) return;
+    const expected = currentActiveShift?.expectedDrawerCash ?? currentActiveShift?.expectedCash ?? 0;
+    handleCloseShift(activeShiftSession.shiftId, expected, "", activeShiftDurationText);
+    sfx.playClick();
   };
 
   // Screen Title & Subtitle
   const pageTitles: Record<Page, [string, string]> = {
-    pos: ["نقطة البيع (POS)", "اختر الخدمات وأسند الحلاق وأكمل الطلب بسرعة"],
+    pos: ["الكاشير", "نقطة البيع وإدارة الطلبات"],
     attendance: ["الحضور والانصراف", "متابعة كراسي الحلاقة والورديات بالرمز السري"],
     invoices: ["سجل الفواتير والمبيعات", "إدارة الفواتير، إعادة الطباعة، والإلغاء والاسترجاع"],
     services: ["دليل الخدمات والباقات", "إدارة قوائم الحلاقة والأسعار والعمولات المحفوظة"],
     inventory: ["المستودع والمشتريات", "متابعة أرصدة الشامبوهات والمستهلكات وتنبيهات النفاد"],
-    admin: ["مركز الإدارة والتحكم", "لوحة القيادة والمتابعة الشاملة لصالون لمسة"],
+    admin: [isAdminUnlocked ? adminSection : "صفحة الإدارة", "لوحة الإدارة والتحكم والتقارير المحمية بكلمة مرور"],
   };
 
-  // Not Logged In View
-  if (!isLoggedIn) {
-    return <LoginScreen onLogin={handleLogin} barbers={barbers} />;
+  // Customer Digital Invoice & Services Menu View (Triggered when QR is scanned by customer)
+  const rawSearch = typeof window !== "undefined" ? window.location.search : "";
+  const rawHash = typeof window !== "undefined" ? window.location.hash : "";
+  const searchOrHash = rawSearch || rawHash;
+  const isQrCustomerView =
+    typeof window !== "undefined" &&
+    (searchOrHash.includes("view=invoice") || searchOrHash.includes("d="));
+
+  if (isQrCustomerView) {
+    const queryPart = rawSearch
+      ? rawSearch
+      : rawHash.includes("?")
+        ? "?" + rawHash.split("?")[1]
+        : "?" + rawHash.replace(/^#\/?/, "");
+    const urlParams = new URLSearchParams(queryPart);
+    const dParam = urlParams.get("d");
+    const decodedInvoice = dParam ? decodeInvoiceFromQrUrl(dParam) : null;
+    return (
+      <CustomerInvoiceView
+        invoiceData={decodedInvoice}
+        onBackToApp={() => {
+          window.location.href = window.location.pathname;
+        }}
+      />
+    );
+  }
+
+  // Shift Start Screen (replaces LoginScreen)
+  if (!activeShiftSession) {
+    return <ShiftStartScreen barbers={barbers} onStartShift={handleStartShift} />;
   }
 
   return (
-    <div className={`app-shell ${isSidebarCollapsed ? "nav-collapsed" : ""}`}>
+    <div
+      className={`app-shell ${isSidebarCollapsed ? "nav-collapsed" : ""} ${
+        isPosIsolated && currentPage === "pos" ? "pos-isolated" : ""
+      }`}
+    >
       {/* 1. Custom Windows Desktop Titlebar */}
-      <DesktopTitlebar
-        activeCashier={currentUsername}
-        userRole={currentUserRole}
-        currentPage={currentPage}
-        isLocked={isScreenLocked}
-        onLockToggle={() => setIsScreenLocked(!isScreenLocked)}
-        isMuted={isMuted}
-        onMuteToggle={handleMuteToggle}
-        onOpenQueue={() => setShowQueueModal(true)}
-      />
+      <DesktopTitlebar currentPage={currentPage} />
 
       {/* 2. Fixed Right Sidebar in Arabic RTL */}
       <aside className="sidebar">
@@ -593,31 +1060,25 @@ export default function App() {
           </button>
         </div>
 
-        {/* Current User Card */}
+        {/* Current Shift User Card (Text-only, no photo avatar) */}
         {!isSidebarCollapsed && (
           <div className="sidebar-user">
-            <div className="user-avatar-wrap">
-              <img
-                src={
-                  currentUserRole === "admin"
-                    ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
-                    : currentUserRole === "cashier"
-                      ? "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80"
-                      : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80"
-                }
-                alt="user"
-                className="user-avatar"
-              />
-              <span className="user-online-dot" />
-            </div>
-            <div className="user-meta">
-              <div className="user-name">{currentUsername}</div>
+            <div className="user-meta" style={{ width: "100%" }}>
+              <div className="user-name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: "#3FB950",
+                    boxShadow: "0 0 8px rgba(63, 185, 80, 0.7)",
+                    flexShrink: 0,
+                  }}
+                />
+                <span>{activeShiftSession.cashierName}</span>
+              </div>
               <span className="user-role-pill">
-                {currentUserRole === "admin"
-                  ? "السوبر أدمن • المدير العام"
-                  : currentUserRole === "cashier"
-                    ? "كاشير مناوب"
-                    : "الموظف المعتمد"}
+                وردية #{activeShiftSession.shiftId} • جارية الآن
               </span>
             </div>
           </div>
@@ -625,37 +1086,315 @@ export default function App() {
 
         {/* Navigation Menu */}
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
+          <button
+            type="button"
+            className={`nav-item ${currentPage === "pos" ? "active" : ""}`}
+            onClick={() => setCurrentPage("pos")}
+            title="الكاشير (F1)"
+          >
+            <span className="nav-icon">
+              <Icon name="grid" size={20} />
+            </span>
+            {!isSidebarCollapsed && (
+              <>
+                <span style={{ flex: 1 }}>الكاشير</span>
+                <kbd>F1</kbd>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item ${currentPage === "attendance" ? "active" : ""}`}
+            onClick={() => setCurrentPage("attendance")}
+            title="الحضور والانصراف"
+          >
+            <span className="nav-icon">
+              <Icon name="clock" size={20} />
+            </span>
+            {!isSidebarCollapsed && (
+              <span style={{ flex: 1 }}>الحضور والانصراف</span>
+            )}
+          </button>
+
+          {/* Quick Operational Actions inside Sidebar (Right Under Attendance) */}
+          <div
+            style={{
+              marginTop: 4,
+              paddingTop: 8,
+              borderTop: "1px solid var(--border)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+            }}
+          >
+            {!isSidebarCollapsed && (
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "var(--muted)",
+                  padding: "2px 10px 4px",
+                }}
+              >
+                إجراءات الكاشير السريعة
+              </div>
+            )}
+
             <button
-              key={item.id}
               type="button"
-              className={`nav-item ${currentPage === item.id ? "active" : ""}`}
-              onClick={() => setCurrentPage(item.id)}
-              title={item.label}
+              className="nav-item"
+              onClick={() => {
+                setCurrentPage("pos");
+                setOpenPendingSignal((s) => s + 1);
+              }}
+              title="الطلبات المعلقة (F4)"
+              style={{
+                color: heldOrders.length > 0 ? "var(--warning-text)" : undefined,
+              }}
             >
               <span className="nav-icon">
-                <Icon name={item.icon} size={20} />
+                <Icon name="pause" size={18} />
               </span>
               {!isSidebarCollapsed && (
                 <>
-                  <span style={{ flex: 1 }}>{item.label}</span>
-                  {item.shortcut && <kbd>{item.shortcut}</kbd>}
+                  <span style={{ flex: 1 }}>الطلبات المعلقة</span>
+                  {heldOrders.length > 0 && (
+                    <span
+                      style={{
+                        fontFamily: "Inter",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        padding: "1px 7px",
+                        borderRadius: 20,
+                        background: "var(--warning-soft)",
+                        border: "1px solid var(--warning-border)",
+                        color: "var(--warning-text)",
+                      }}
+                    >
+                      {heldOrders.length}
+                    </span>
+                  )}
+                  <kbd>F4</kbd>
                 </>
               )}
             </button>
-          ))}
+
+
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => {
+                setCurrentPage("pos");
+                setOpenCashOutSignal((s) => s + 1);
+              }}
+              title="خروج وصرف نقدية من الدرج (سلفة، مصاريف ونثريات، مسحوبات) - F7"
+            >
+              <span className="nav-icon" style={{ color: "var(--danger-text)" }}>
+                <Icon name="dollarSign" size={18} />
+              </span>
+              {!isSidebarCollapsed && (
+                <>
+                  <span style={{ flex: 1, color: "var(--danger-text)", fontWeight: 700 }}>خروج نقدية من الدرج</span>
+                  <kbd style={{ color: "var(--danger-text)", borderColor: "var(--danger-border)" }}>F7</kbd>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Admin Page Navigation Button */}
+          <div style={{ marginTop: 6, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+            <button
+              type="button"
+              className={`nav-item ${currentPage === "admin" ? "active" : ""}`}
+              onClick={() => setCurrentPage("admin")}
+              title="صفحة الإدارة"
+            >
+              <span className="nav-icon">
+                <Icon name="shield" size={20} />
+              </span>
+              {!isSidebarCollapsed && (
+                <span style={{ flex: 1 }}>صفحة الإدارة</span>
+              )}
+            </button>
+          </div>
+
+          {/* Admin Sections inside Sidebar when Admin Page is Unlocked */}
+          {currentPage === "admin" && isAdminUnlocked && (
+            <div
+              style={{
+                marginTop: 6,
+                paddingTop: 10,
+                borderTop: "1px solid var(--border)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+              }}
+            >
+              {!isSidebarCollapsed && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "var(--muted)",
+                    padding: "2px 10px 6px",
+                  }}
+                >
+                  أقسام الإدارة
+                </div>
+              )}
+              {ADMIN_SECTIONS.map((sec) => {
+                const isActive = adminSection === sec.id;
+                return (
+                  <button
+                    key={sec.id}
+                    type="button"
+                    className={`nav-item ${isActive ? "active" : ""}`}
+                    onClick={() => setAdminSection(sec.id)}
+                    title={sec.label}
+                    style={{
+                      height: 38,
+                      fontSize: 13.5,
+                      padding: isSidebarCollapsed ? "0 12px" : "0 14px",
+                      gap: 10,
+                    }}
+                  >
+                    <span className="nav-icon">
+                      <Icon name={sec.icon} size={17} />
+                    </span>
+                    {!isSidebarCollapsed && <span style={{ flex: 1 }}>{sec.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </nav>
 
-        {/* Sidebar Footer */}
+        {/* Sidebar Footer: System Utilities, Live Shift Timer & Close Shift Button */}
         <div className="sidebar-footer">
+          {/* Quick Utilities Strip (Theme / Sound / Lock Screen) */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isSidebarCollapsed ? "1fr" : "repeat(3, 1fr)",
+              gap: 6,
+              marginBottom: 8,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const next = saveThemeMode(themeMode === "dark" ? "light" : "dark");
+                setThemeMode(next);
+              }}
+              title={themeMode === "light" ? "التبديل إلى الوضع الداكن" : "التبديل إلى الوضع النهاري (Light Mode)"}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 5,
+                height: 32,
+                borderRadius: 8,
+                border: "1px solid var(--border-gold)",
+                background: "var(--gold-soft)",
+                color: "var(--light-gold)",
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <Icon name={themeMode === "light" ? "moon" : "sun"} size={13} />
+              {!isSidebarCollapsed && <span>{themeMode === "light" ? "داكن" : "نهاري"}</span>}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleMuteToggle}
+              title={isMuted ? "تشغيل أصوات النظام" : "كتم أصوات النظام"}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 5,
+                height: 32,
+                borderRadius: 8,
+                border: `1px solid ${isMuted ? "var(--danger-border)" : "var(--border)"}`,
+                background: isMuted ? "var(--danger-soft)" : "var(--surface-soft)",
+                color: isMuted ? "var(--danger-text)" : "var(--text-secondary)",
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <Icon name={isMuted ? "volumeX" : "volume"} size={13} />
+              {!isSidebarCollapsed && <span>{isMuted ? "صامت" : "صوت"}</span>}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsScreenLocked(!isScreenLocked)}
+              title={isScreenLocked ? "إلغاء قفل الشاشة" : "قفل الشاشة السريع"}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 5,
+                height: 32,
+                borderRadius: 8,
+                border: `1px solid ${isScreenLocked ? "var(--warning-border)" : "var(--border)"}`,
+                background: isScreenLocked ? "var(--warning-soft)" : "var(--surface-soft)",
+                color: isScreenLocked ? "var(--warning-text)" : "var(--text-secondary)",
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <Icon name={isScreenLocked ? "lock" : "unlock"} size={13} />
+              {!isSidebarCollapsed && <span>{isScreenLocked ? "مقفول" : "قفل"}</span>}
+            </button>
+          </div>
+
+          {!isSidebarCollapsed && (
+            <div
+              style={{
+                background: "rgba(63, 185, 80, 0.08)",
+                border: "1px solid rgba(63, 185, 80, 0.28)",
+                borderRadius: 10,
+                padding: "10px 12px",
+                marginBottom: 8,
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                <Icon name="clock" size={12} />
+                <span>مؤقت الوردية الحالية</span>
+              </div>
+              <div
+                style={{
+                  fontSize: 20,
+                  fontWeight: 800,
+                  color: "var(--success-text)",
+                  fontFamily: "Inter",
+                  fontVariantNumeric: "tabular-nums",
+                  letterSpacing: 1.5,
+                }}
+              >
+                {activeShiftDurationText}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             className="logout-btn"
-            onClick={handleLogout}
-            title="تسجيل الخروج"
+            onClick={handleOpenCloseShiftModal}
+            title={`قفل الوردية (${activeShiftDurationText})`}
           >
-            <Icon name="logout" size={17} />
-            {!isSidebarCollapsed && <span>تسجيل الخروج</span>}
+            <Icon name="lock" size={17} />
+            {!isSidebarCollapsed && <span>قفل الوردية</span>}
           </button>
           {!isSidebarCollapsed && (
             <div className="app-version-tag">
@@ -669,11 +1408,25 @@ export default function App() {
       <main className="main-content">
         {/* Streamlined Top Header: Hidden for POS to maximize workspace and eliminate duplicate headers */}
         {currentPage !== "pos" && (
-          <div className="topbar" style={{ marginBottom: 16, padding: "4px 0" }}>
+          <div className="topbar" style={{ marginBottom: 16, padding: "4px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div className="topbar-titles">
               <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>{pageTitles[currentPage][0]}</h1>
-              <p style={{ fontSize: 13, color: "#888", margin: "2px 0 0" }}>{pageTitles[currentPage][1]}</p>
+              <p style={{ fontSize: 13, color: "var(--muted)", margin: "2px 0 0" }}>{pageTitles[currentPage][1]}</p>
             </div>
+            {currentPage === "admin" && isAdminUnlocked && (
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => {
+                  setIsAdminUnlocked(false);
+                  showToast("تم قفل شاشة الإدارة");
+                }}
+                style={{ height: 36, padding: "0 14px", fontSize: 12.5 }}
+              >
+                <Icon name="lock" size={15} />
+                <span>قفل شاشة الإدارة</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -683,9 +1436,24 @@ export default function App() {
             services={services}
             barbers={barbers}
             onCheckout={handleOpenCheckout}
-            activeCashier={currentUsername}
+            activeCashier={activeShiftSession.cashierName}
+            shiftNumber={activeShiftSession.shiftId}
             onOpenQueue={() => setShowQueueModal(true)}
             onAddAdvance={handleAddAdvance}
+            onCashOut={handleCashOut}
+            drawerCash={
+              (shifts.find((s) => s.status === "نشطة")?.openingCash || 0) +
+              (shifts.find((s) => s.status === "نشطة")?.cashSales || 0) -
+              (shifts.find((s) => s.status === "نشطة")?.drawerExpenses || 0)
+            }
+            heldOrders={heldOrders}
+            onHeldOrdersChange={setHeldOrders}
+            openPendingSignal={openPendingSignal}
+            openAdvanceSignal={openAdvanceSignal}
+            openCashOutSignal={openCashOutSignal}
+            clearCartSignal={clearCartSignal}
+            isIsolated={isPosIsolated}
+            onToggleIsolated={() => setIsPosIsolated((v) => !v)}
           />
         )}
 
@@ -694,47 +1462,28 @@ export default function App() {
             barbers={barbers}
             attendanceRecords={attendanceRecords}
             advances={advances}
-            userRole={currentUserRole}
+            userRole="cashier"
             activeEmployeeName={currentUsername}
             onUpdateBarberStatus={handleUpdateBarberStatus}
             onAdminCorrectAttendance={handleAdminCorrectAttendance}
           />
         )}
 
-        {currentPage === "invoices" && (
-          <InvoicesPage
-            invoices={invoices}
-            userRole={currentUserRole}
-            onCancelInvoice={handleCancelInvoice}
-            onRefundInvoice={handleRefundInvoice}
-            onRevealPhone={handleRevealPhone}
+        {currentPage === "admin" && !isAdminUnlocked && (
+          <AdminPasswordGate
+            expectedPassword={adminPassword}
+            onUnlock={() => {
+              setIsAdminUnlocked(true);
+              sfx.playClick();
+              showToast("تم فتح صفحة الإدارة بنجاح");
+            }}
           />
         )}
 
-        {currentPage === "services" && currentUserRole === "admin" && (
-          <ServicesPage
-            services={services}
-            onSaveService={handleSaveService}
-            onToggleServiceStatus={handleToggleServiceStatus}
-            onArchiveService={handleArchiveService}
-          />
-        )}
-
-        {currentPage === "inventory" && (currentUserRole === "admin" || currentUserRole === "cashier") && (
-          <InventoryPage
-            products={inventory}
-            barbers={barbers}
-            onAddProduct={handleAddProduct}
-            onRecordPurchase={handleRecordPurchase}
-            onRecordConsumption={handleRecordConsumption}
-          />
-        )}
-
-        {currentPage === "admin" && currentUserRole === "admin" && (
+        {currentPage === "admin" && isAdminUnlocked && (
           <AdminPage
             invoices={invoices}
             barbers={barbers}
-            coupons={coupons}
             expenses={expenses}
             shifts={shifts}
             auditLogs={auditLogs}
@@ -742,20 +1491,30 @@ export default function App() {
             services={services}
             advances={advances}
             attendanceRecords={attendanceRecords}
+            activeUsername={currentUsername}
+            activeSection={adminSection}
+            adminPassword={adminPassword}
+            onUpdateAdminPassword={(newPass) => {
+              setAdminPassword(newPass);
+              secureStorage.setItem("pos_admin_password", newPass);
+            }}
             onAddAdvance={handleAddAdvance}
             onEditAdvance={handleEditAdvance}
             onDeleteAdvance={handleDeleteAdvance}
-            onSaveCoupon={(c) => {
-              setCoupons((prev) => {
-                const idx = prev.findIndex((x) => x.id === c.id);
-                if (idx > -1) {
-                  const next = [...prev];
-                  next[idx] = c;
-                  return next;
-                }
-                return [c, ...prev];
-              });
-            }}
+            onCancelInvoice={handleCancelInvoice}
+            onRefundInvoice={handleRefundInvoice}
+            onRevealPhone={handleRevealPhone}
+            onSaveService={handleSaveService}
+            onToggleServiceStatus={handleToggleServiceStatus}
+            onArchiveService={handleArchiveService}
+            onAddProduct={handleAddProduct}
+            onRecordPurchase={handleRecordPurchase}
+            onRecordConsumption={handleRecordConsumption}
+            onDeleteProduct={handleDeleteProduct}
+            onUpdateBarberStatus={handleUpdateBarberStatus}
+            onAdminCorrectAttendance={handleAdminCorrectAttendance}
+            onUpdateBarberSchedule={handleUpdateBarberSchedule}
+            onDeleteEmployee={handleDeleteEmployee}
             onSaveEmployee={(emp) => {
               setBarbers((prev) => {
                 const idx = prev.findIndex((x) => x.id === emp.id);
@@ -778,7 +1537,7 @@ export default function App() {
                 commercialReg: s.commercialReg,
               });
               setSalonSettings(updated);
-              showToast("✅ تم تحديث وتطبيق إعدادات الصالون في جميع الشاشات بنجاح");
+              showToast("تم تحديث وتطبيق إعدادات الصالون في جميع الشاشات بنجاح");
             }}
           />
         )}
@@ -791,10 +1550,249 @@ export default function App() {
           subtotal={pendingCheckoutTotal}
           onClose={() => setCheckoutModalOpen(false)}
           onPaymentSuccess={handlePaymentSuccess}
-          coupons={coupons}
-          activeCashier={currentUsername}
-          shiftId={104}
+          activeCashier={activeShiftSession.cashierName}
+          shiftId={activeShiftSession.shiftId}
         />
+      )}
+
+      {/* Close Shift Confirmation Modal */}
+      {closeShiftModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: 440, borderRadius: 20, overflow: "hidden" }}>
+            <div className="modal-head" style={{ padding: "18px 22px", background: "var(--surface)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 12,
+                    background: "linear-gradient(135deg, rgba(212, 175, 55, 0.22) 0%, rgba(212, 175, 55, 0.06) 100%)",
+                    border: "1.5px solid var(--border-gold)",
+                    color: "var(--gold)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 2px 10px rgba(212, 175, 55, 0.15)",
+                  }}
+                >
+                  <Icon name="lock" size={20} />
+                </div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: "var(--text)" }}>
+                      إقفال الوردية
+                    </h2>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 800,
+                        padding: "2px 8px",
+                        borderRadius: 6,
+                        background: "var(--surface-soft)",
+                        border: "1px solid var(--border-gold)",
+                        color: "var(--gold)",
+                        fontFamily: "Inter, monospace",
+                        direction: "ltr",
+                        display: "inline-block",
+                      }}
+                    >
+                      #{activeShiftSession.shiftId}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 12, color: "var(--muted)", margin: "3px 0 0" }}>
+                    إنهاء الجلسة وتسجيل ساعات العمل وتصفية المبيعات
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCloseShiftModalOpen(false)}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "transparent",
+                  border: "1px solid var(--border)",
+                  color: "var(--muted)",
+                  cursor: "pointer",
+                }}
+                title="إغلاق النافذة"
+              >
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmCloseShift} style={{ display: "flex", flexDirection: "column", margin: 0 }}>
+              <div className="modal-body" style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+                {/* Confirmation Prompt Banner */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    background: "rgba(212, 175, 55, 0.08)",
+                    border: "1px solid rgba(212, 175, 55, 0.35)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 8,
+                      background: "rgba(212, 175, 55, 0.16)",
+                      color: "var(--gold)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Icon name="alert" size={18} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>
+                      هل أنت متأكد من إنهاء وإقفال الوردية الحالية؟
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
+                      سيتم احتساب ساعات العمل وتوثيق الإيرادات بالسجل المحاسبي فوراً.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shift Details Luxury Card */}
+                <div
+                  style={{
+                    background: "var(--surface-soft)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 14,
+                    padding: "14px 16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  {/* Cashier Row */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      paddingBottom: 10,
+                      borderBottom: "1px solid var(--border)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", fontSize: 13 }}>
+                      <Icon name="scissors" size={16} style={{ color: "var(--gold)" } as React.CSSProperties} />
+                      <span>مسؤول الوردية:</span>
+                    </div>
+                    <strong style={{ color: "var(--text)", fontSize: 14, fontWeight: 800 }}>
+                      {activeShiftSession.cashierName}
+                    </strong>
+                  </div>
+
+                  {/* Duration / Timer Row */}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", fontSize: 13 }}>
+                      <Icon name="clock" size={16} style={{ color: "var(--gold)" } as React.CSSProperties} />
+                      <span>ساعات عمل الوردية:</span>
+                    </div>
+                    <div
+                      style={{
+                        background: "var(--surface)",
+                        border: "1px solid var(--border-gold)",
+                        padding: "4px 12px",
+                        borderRadius: 8,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: "var(--gold)",
+                          boxShadow: "0 0 8px rgba(212, 175, 55, 0.6)",
+                        }}
+                      />
+                      <strong
+                        style={{
+                          color: "var(--gold)",
+                          fontFamily: "Inter, monospace",
+                          fontSize: 15,
+                          fontWeight: 800,
+                          fontVariantNumeric: "tabular-nums",
+                          letterSpacing: 1,
+                          direction: "ltr",
+                        }}
+                      >
+                        {activeShiftDurationText}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer with Actions */}
+              <div
+                className="modal-foot"
+                style={{
+                  padding: "14px 22px",
+                  background: "var(--surface)",
+                  borderTop: "1px solid var(--border)",
+                  display: "flex",
+                  gap: 12,
+                }}
+              >
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => setCloseShiftModalOpen(false)}
+                  style={{
+                    minWidth: 100,
+                    height: 44,
+                    borderRadius: 10,
+                    fontWeight: 700,
+                    fontSize: 13.5,
+                  }}
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="primary-btn"
+                  style={{
+                    flex: 1,
+                    height: 44,
+                    borderRadius: 10,
+                    fontWeight: 800,
+                    fontSize: 14,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Icon name="lock" size={16} />
+                  <span>تأكيد إقفال الوردية</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Queue Screen Modal */}
@@ -821,14 +1819,14 @@ export default function App() {
         >
           <div
             style={{
-              background: "#161616",
-              border: "1.5px solid #D4AF37",
+              background: "var(--card)",
+              border: "1.5px solid var(--gold)",
               borderRadius: 18,
               padding: 36,
               maxWidth: 400,
               width: "100%",
               textAlign: "center",
-              boxShadow: "0 25px 60px rgba(0,0,0,0.8)",
+              boxShadow: "var(--shadow-lg)",
             }}
           >
             <div
@@ -836,9 +1834,9 @@ export default function App() {
                 width: 60,
                 height: 60,
                 borderRadius: "50%",
-                background: "rgba(212, 175, 55, 0.15)",
-                border: "2px solid #D4AF37",
-                color: "#D4AF37",
+                background: "var(--gold-soft)",
+                border: "2px solid var(--gold)",
+                color: "var(--gold)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -848,22 +1846,22 @@ export default function App() {
               <Icon name="lock" size={28} />
             </div>
 
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#FFF", margin: "0 0 6px" }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: "0 0 6px" }}>
               شاشة الطرفية مقفلة
             </h2>
-            <p style={{ fontSize: 13, color: "#888", marginBottom: 20 }}>
+            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 20 }}>
               أدخل كلمة المرور أو رمز PIN لفتح قفل الشاشة ومتابعة العمل
             </p>
 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (lockPin === "1234" || lockPin === "admin123") {
+                if (lockPin === "1234" || lockPin === adminPassword) {
                   setIsScreenLocked(false);
                   setLockPin("");
                   showToast("تم فتح قفل الشاشة بنجاح");
                 } else {
-                  alert("كلمة المرور غير صحيحة! جرب: 1234 أو admin123");
+                  alert("كلمة المرور غير صحيحة!");
                 }
               }}
             >

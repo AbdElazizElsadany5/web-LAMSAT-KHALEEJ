@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Invoice,
   Barber,
-  Coupon,
   ExpenseRecord,
   ShiftRecord,
   AuditLog,
@@ -15,9 +14,7 @@ import { Icon, IconName } from "./Icons";
 
 // Modular Admin Subcomponents
 import { AdminOverview } from "./admin/AdminOverview";
-import { AdminCoupons } from "./admin/AdminCoupons";
 import { AdminEmployees } from "./admin/AdminEmployees";
-import { AdminUsers } from "./admin/AdminUsers";
 import { AdminExpenses } from "./admin/AdminExpenses";
 import { AdminPayroll } from "./admin/AdminPayroll";
 import { AdminAdvances } from "./admin/AdminAdvances";
@@ -27,11 +24,32 @@ import { AdminThermal } from "./admin/AdminThermal";
 import { AdminAudit } from "./admin/AdminAudit";
 import { AdminSettings } from "./admin/AdminSettings";
 import { AdminBackup } from "./admin/AdminBackup";
+import { InvoicesPage } from "./InvoicesPage";
+import { ServicesPage } from "./ServicesPage";
+import { InventoryPage } from "./InventoryPage";
+import { AttendancePage } from "./AttendancePage";
+
+export const ADMIN_SECTIONS: { id: string; label: string; icon: IconName }[] = [
+  { id: "نظرة عامة", label: "نظرة عامة", icon: "grid" },
+  { id: "الفواتير", label: "الفواتير", icon: "receipt" },
+  { id: "الخدمات", label: "الخدمات", icon: "scissors" },
+  { id: "المشتريات والمخزون", label: "المشتريات والمخزون", icon: "box" },
+  { id: "إدارة الحضور", label: "إدارة الحضور", icon: "clock" },
+  { id: "الموظفون", label: "الموظفون", icon: "users" },
+  { id: "المصروفات", label: "المصروفات", icon: "wallet" },
+  { id: "السلف والخصومات", label: "السلف والخصومات", icon: "dollarSign" },
+  { id: "الرواتب والمستحقات", label: "الرواتب والمستحقات", icon: "users" },
+  { id: "التقارير", label: "التقارير", icon: "chart" },
+  { id: "الورديات والخزينة", label: "الورديات والخزينة", icon: "receipt" },
+  { id: "الطباعة الحرارية", label: "الطباعة الحرارية", icon: "printer" },
+  { id: "سجل العمليات", label: "سجل العمليات", icon: "shield" },
+  { id: "الإعدادات", label: "الإعدادات", icon: "settings" },
+  { id: "النسخ الاحتياطي", label: "النسخ الاحتياطي", icon: "backup" },
+];
 
 export function AdminPage({
   invoices,
   barbers,
-  coupons,
   expenses,
   shifts,
   auditLogs,
@@ -39,7 +57,8 @@ export function AdminPage({
   services,
   advances = [],
   attendanceRecords = [],
-  onSaveCoupon,
+  activeUsername = "المدير العام",
+  activeSection: controlledSection,
   onSaveEmployee,
   onAddExpense,
   onCloseShift,
@@ -47,10 +66,25 @@ export function AdminPage({
   onAddAdvance,
   onEditAdvance,
   onDeleteAdvance,
+  onCancelInvoice,
+  onRefundInvoice,
+  onRevealPhone,
+  onSaveService,
+  onToggleServiceStatus,
+  onArchiveService,
+  onAddProduct,
+  onRecordPurchase,
+  onRecordConsumption,
+  onDeleteProduct,
+  onUpdateBarberStatus,
+  onAdminCorrectAttendance,
+  onUpdateBarberSchedule,
+  onDeleteEmployee,
+  adminPassword,
+  onUpdateAdminPassword,
 }: {
   invoices: Invoice[];
   barbers: Barber[];
-  coupons: Coupon[];
   expenses: ExpenseRecord[];
   shifts: ShiftRecord[];
   auditLogs: AuditLog[];
@@ -58,16 +92,33 @@ export function AdminPage({
   services: ServiceItem[];
   advances?: AdvanceRecord[];
   attendanceRecords?: AttendanceRecord[];
-  onSaveCoupon: (coupon: Coupon) => void;
+  activeUsername?: string;
+  activeSection?: string;
   onSaveEmployee: (employee: Barber) => void;
+  onDeleteEmployee?: (barberId: string) => void;
   onAddExpense: (expense: ExpenseRecord) => void;
   onCloseShift: (shiftId: number, actualCash: number, notes: string) => void;
   onSaveSettings: (settings: Record<string, string>) => void;
   onAddAdvance?: (advance: AdvanceRecord) => void;
   onEditAdvance?: (advance: AdvanceRecord) => void;
   onDeleteAdvance?: (id: string) => void;
+  onCancelInvoice: (invoiceId: string, reason: string) => void;
+  onRefundInvoice: (invoiceId: string, reason: string) => void;
+  onRevealPhone: (invoiceId: string, reason: string) => void;
+  onSaveService: (service: ServiceItem) => void;
+  onToggleServiceStatus: (serviceId: number) => void;
+  onArchiveService: (serviceId: number) => void;
+  onAddProduct: (product: InventoryProduct) => void;
+  onRecordPurchase: (supplier: string, invoiceNum: string, itemsDesc: string, totalCost: number) => void;
+  onRecordConsumption: (barberId: string, productId: string, qty: number, reason: string) => void;
+  onDeleteProduct?: (productId: string) => void;
+  onUpdateBarberStatus: (barberId: string, newStatus: Barber["status"], timeStr: string) => void;
+  onAdminCorrectAttendance: (recordId: string, newCheckIn: string, newCheckOut: string, reason: string) => void;
+  onUpdateBarberSchedule?: (barberId: string, scheduledTime: string) => void;
+  adminPassword?: string;
+  onUpdateAdminPassword?: (newPass: string) => void;
 }) {
-  const [activeSection, setActiveSection] = useState<string>("نظرة عامة");
+  const activeSection = controlledSection || "نظرة عامة";
   const [toastMsg, setToastMsg] = useState("");
 
   const showToast = (msg: string) => {
@@ -75,66 +126,8 @@ export function AdminPage({
     setTimeout(() => setToastMsg(""), 3500);
   };
 
-  const adminSections: { id: string; label: string; icon: IconName }[] = [
-    { id: "نظرة عامة", label: "نظرة عامة", icon: "grid" },
-    { id: "الكوبونات", label: "الكوبونات", icon: "tag" },
-    { id: "الموظفون", label: "الموظفون", icon: "users" },
-    { id: "المستخدمون", label: "المستخدمون", icon: "key" },
-    { id: "المصروفات", label: "المصروفات", icon: "wallet" },
-    { id: "السلف والخصومات", label: "السلف والخصومات", icon: "dollarSign" },
-    { id: "الرواتب والمستحقات", label: "الرواتب والمستحقات", icon: "users" },
-    { id: "التقارير", label: "التقارير", icon: "chart" },
-    { id: "الورديات والخزينة", label: "الورديات والخزينة", icon: "receipt" },
-    { id: "الطباعة الحرارية", label: "الطباعة الحرارية", icon: "printer" },
-    { id: "سجل العمليات", label: "سجل العمليات", icon: "shield" },
-    { id: "الإعدادات", label: "الإعدادات", icon: "settings" },
-    { id: "النسخ الاحتياطي", label: "النسخ الاحتياطي", icon: "backup" },
-  ];
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* 12 Tabs Internal Navigation Strip */}
-      <div
-        style={{
-          display: "flex",
-          gap: 6,
-          overflowX: "auto",
-          paddingBottom: 4,
-          borderBottom: "1px solid #201B12",
-          scrollbarWidth: "none",
-        }}
-      >
-        {adminSections.map((sec) => {
-          const isActive = activeSection === sec.id;
-          return (
-            <button
-              key={sec.id}
-              type="button"
-              onClick={() => setActiveSection(sec.id)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "8px 14px",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: isActive ? 800 : 600,
-                color: isActive ? "#F5C242" : "#A0A0A0",
-                background: isActive
-                  ? "linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(212, 175, 55, 0.05) 100%)"
-                  : "#121212",
-                border: `1px solid ${isActive ? "#D4AF37" : "#262015"}`,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <Icon name={sec.icon} size={15} />
-              <span>{sec.label}</span>
-            </button>
-          );
-        })}
-      </div>
 
       {/* Render Active Subcomponent */}
       {activeSection === "نظرة عامة" && (
@@ -148,11 +141,46 @@ export function AdminPage({
         />
       )}
 
-      {activeSection === "الكوبونات" && (
-        <AdminCoupons
-          coupons={coupons}
-          onSaveCoupon={onSaveCoupon}
-          onShowToast={showToast}
+      {activeSection === "الفواتير" && (
+        <InvoicesPage
+          invoices={invoices}
+          userRole="admin"
+          onCancelInvoice={onCancelInvoice}
+          onRefundInvoice={onRefundInvoice}
+          onRevealPhone={onRevealPhone}
+        />
+      )}
+
+      {activeSection === "الخدمات" && (
+        <ServicesPage
+          services={services}
+          onSaveService={onSaveService}
+          onToggleServiceStatus={onToggleServiceStatus}
+          onArchiveService={onArchiveService}
+        />
+      )}
+
+      {activeSection === "المشتريات والمخزون" && (
+        <InventoryPage
+          products={inventory}
+          barbers={barbers}
+          onAddProduct={onAddProduct}
+          onRecordPurchase={onRecordPurchase}
+          onRecordConsumption={onRecordConsumption}
+          onDeleteProduct={onDeleteProduct}
+        />
+      )}
+
+      {activeSection === "إدارة الحضور" && (
+        <AttendancePage
+          barbers={barbers}
+          attendanceRecords={attendanceRecords}
+          advances={advances}
+          userRole="admin"
+          activeEmployeeName={activeUsername}
+          onUpdateBarberStatus={onUpdateBarberStatus}
+          onAdminCorrectAttendance={onAdminCorrectAttendance}
+          onUpdateBarberSchedule={onUpdateBarberSchedule}
         />
       )}
 
@@ -162,12 +190,9 @@ export function AdminPage({
           attendanceRecords={attendanceRecords}
           advances={advances}
           onSaveEmployee={onSaveEmployee}
+          onDeleteEmployee={onDeleteEmployee}
           onShowToast={showToast}
         />
-      )}
-
-      {activeSection === "المستخدمون" && (
-        <AdminUsers onShowToast={showToast} />
       )}
 
       {activeSection === "المصروفات" && (
@@ -193,6 +218,7 @@ export function AdminPage({
         <AdminPayroll
           barbers={barbers}
           advances={advances}
+          attendanceRecords={attendanceRecords}
           onShowToast={showToast}
         />
       )}
@@ -209,6 +235,7 @@ export function AdminPage({
           shifts={shifts}
           onCloseShift={onCloseShift}
           onShowToast={showToast}
+          invoices={invoices}
         />
       )}
 
@@ -227,6 +254,8 @@ export function AdminPage({
         <AdminSettings
           onSaveSettings={onSaveSettings}
           onShowToast={showToast}
+          adminPassword={adminPassword}
+          onUpdateAdminPassword={onUpdateAdminPassword}
         />
       )}
 
@@ -237,7 +266,7 @@ export function AdminPage({
       {/* Local Toast notification */}
       {toastMsg && (
         <div className="toast-bar">
-          <Icon name="check" size={17} style={{ color: "#3FB950" } as any} />
+          <Icon name="check" size={17} style={{ color: "var(--success-text)" } as any} />
           <span>{toastMsg}</span>
         </div>
       )}

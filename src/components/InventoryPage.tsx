@@ -8,12 +8,14 @@ export function InventoryPage({
   onAddProduct,
   onRecordPurchase,
   onRecordConsumption,
+  onDeleteProduct,
 }: {
   products: InventoryProduct[];
   barbers: Barber[];
   onAddProduct: (product: InventoryProduct) => void;
   onRecordPurchase: (supplier: string, invoiceNum: string, itemsDesc: string, totalCost: number) => void;
   onRecordConsumption: (barberId: string, productId: string, qty: number, reason: string) => void;
+  onDeleteProduct?: (productId: string) => void;
 }) {
   const [selectedCategory, setSelectedCategory] = useState<string>("الكل");
   const [searchQuery, setSearchQuery] = useState("");
@@ -159,7 +161,7 @@ export function InventoryPage({
               <span>بسعر التكلفة الإجمالي</span>
             </div>
           </div>
-          <div className="kpi-icon-wrap" style={{ color: "#F5C242", borderColor: "#554215" }}>
+          <div className="kpi-icon-wrap" style={{ color: "var(--light-gold)", borderColor: "var(--border-gold)" }}>
             <Icon name="wallet" size={20} />
           </div>
         </div>
@@ -167,14 +169,14 @@ export function InventoryPage({
         <div className="kpi-card">
           <div>
             <div className="kpi-label">تنبيهات انخفاض المخزون</div>
-            <div className="kpi-value" style={{ color: lowStockCount > 0 ? "#FF8E92" : "#56D364" }}>
+            <div className="kpi-value" style={{ color: lowStockCount > 0 ? "var(--danger-text)" : "var(--success-text)" }}>
               {lowStockCount} <small style={{ fontSize: 14 }}>أصناف حرجة</small>
             </div>
-            <div className="kpi-hint" style={{ color: lowStockCount > 0 ? "#FF8E92" : "#888" }}>
+            <div className="kpi-hint" style={{ color: lowStockCount > 0 ? "var(--danger-text)" : "var(--muted)" }}>
               <span>أقل من حد إعادة الطلب الأدنى</span>
             </div>
           </div>
-          <div className="kpi-icon-wrap" style={{ color: "#E5484D", borderColor: "#5A1E20" }}>
+          <div className="kpi-icon-wrap" style={{ color: "var(--danger-text)", borderColor: "var(--danger-border)" }}>
             <Icon name="alert" size={20} />
           </div>
         </div>
@@ -187,7 +189,7 @@ export function InventoryPage({
               <span>شامل فواتير الموردين</span>
             </div>
           </div>
-          <div className="kpi-icon-wrap" style={{ color: "#3FB950", borderColor: "#1A4522" }}>
+          <div className="kpi-icon-wrap" style={{ color: "var(--success-text)", borderColor: "var(--success-border)" }}>
             <Icon name="receipt" size={20} />
           </div>
         </div>
@@ -214,7 +216,7 @@ export function InventoryPage({
             <button
               type="button"
               className="secondary-btn"
-              style={{ color: "#F5C242", borderColor: "#4E3E1A" }}
+              style={{ color: "var(--light-gold)", borderColor: "var(--border-gold)" }}
               onClick={() => setPurchaseModalOpen(true)}
             >
               <Icon name="download" size={15} />
@@ -247,9 +249,9 @@ export function InventoryPage({
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <Icon name="alert" size={20} style={{ color: "#FF8E92" } as React.CSSProperties} />
+              <Icon name="alert" size={20} style={{ color: "var(--danger-text)" } as React.CSSProperties} />
               <div>
-                <strong style={{ color: "#FF8E92" }}>تنبيه أمني للمخزون:</strong> هناك {lowStockCount} أصناف وصلت أو شارفت على النفاد (أقل من الحد الأدنى)، يرجى إصدار أمر شراء للموردين لتفادي توقف كراسي الحلاقة.
+                <strong style={{ color: "var(--danger-text)" }}>تنبيه أمني للمخزون:</strong> هناك {lowStockCount} أصناف وصلت أو شارفت على النفاد (أقل من الحد الأدنى)، يرجى إصدار أمر شراء للموردين لتفادي توقف كراسي الحلاقة.
               </div>
             </div>
             <button
@@ -266,8 +268,8 @@ export function InventoryPage({
         {/* Filters */}
         <div
           style={{
-            background: "#181818",
-            border: "1px solid #2B2519",
+            background: "var(--surface-soft)",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             padding: 14,
             marginBottom: 20,
@@ -319,6 +321,7 @@ export function InventoryPage({
                 <th>سعر التكلفة</th>
                 <th>المورد الرئيسي</th>
                 <th>الحالة</th>
+                <th>الإجراءات</th>
               </tr>
             </thead>
             <tbody>
@@ -330,12 +333,12 @@ export function InventoryPage({
 
                 return (
                   <tr key={p.id}>
-                    <td style={{ fontFamily: "Inter", fontWeight: 700, color: "#AAA" }}>
+                    <td style={{ fontFamily: "Inter", fontWeight: 700, color: "var(--text-secondary)" }}>
                       {p.sku}
                     </td>
-                    <td style={{ fontWeight: 800, color: "#FFF" }}>{p.name}</td>
+                    <td style={{ fontWeight: 800, color: "var(--text)" }}>{p.name}</td>
                     <td>
-                      <span style={{ padding: "3px 8px", borderRadius: 6, background: "#1E1E1E", fontSize: 12 }}>
+                      <span style={{ padding: "3px 8px", borderRadius: 6, background: "var(--card-hover)", fontSize: 12 }}>
                         {p.category}
                       </span>
                     </td>
@@ -344,17 +347,17 @@ export function InventoryPage({
                         style={{
                           fontSize: 16,
                           fontFamily: "Inter",
-                          color: isCritical ? "#FF8E92" : isLow ? "#FFAE42" : "#56D364",
+                          color: isCritical ? "var(--danger-text)" : isLow ? "var(--warning-text)" : "var(--success-text)",
                         }}
                       >
                         {p.stock}
                       </strong>
                     </td>
-                    <td style={{ fontFamily: "Inter", color: "#888" }}>{minThresh}</td>
-                    <td style={{ fontFamily: "Inter", fontWeight: 700, color: "#F5C242" }}>
+                    <td style={{ fontFamily: "Inter", color: "var(--muted)" }}>{minThresh}</td>
+                    <td style={{ fontFamily: "Inter", fontWeight: 700, color: "var(--light-gold)" }}>
                       {costVal.toLocaleString("ar-EG")} ج.م
                     </td>
-                    <td style={{ fontSize: 13, color: "#AAA" }}>{p.supplier}</td>
+                    <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{p.supplier}</td>
                     <td>
                       <span
                         className={`badge ${
@@ -364,6 +367,34 @@ export function InventoryPage({
                         <i />
                         {isCritical ? "حرج / قارب النفاد" : isLow ? "مخزون منخفض" : "متوفر"}
                       </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`هل أنت متأكد من حذف الصنف «${p.name}» نهائياً من المستودع؟`)) {
+                            if (onDeleteProduct) onDeleteProduct(p.id);
+                            showToast(`تم حذف الصنف «${p.name}» بنجاح`);
+                          }
+                        }}
+                        style={{
+                          background: "rgba(229, 72, 77, 0.1)",
+                          border: "1px solid rgba(229, 72, 77, 0.3)",
+                          color: "var(--danger-text)",
+                          borderRadius: 8,
+                          padding: "5px 10px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 12,
+                          fontWeight: 700,
+                        }}
+                        title={`حذف الصنف «${p.name}»`}
+                      >
+                        <Icon name="trash" size={13} />
+                        <span>حذف</span>
+                      </button>
                     </td>
                   </tr>
                 );
@@ -382,7 +413,7 @@ export function InventoryPage({
               <button
                 type="button"
                 onClick={() => setPurchaseModalOpen(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
@@ -469,7 +500,7 @@ export function InventoryPage({
               <button
                 type="button"
                 onClick={() => setConsumptionModalOpen(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
@@ -561,7 +592,7 @@ export function InventoryPage({
               <button
                 type="button"
                 onClick={() => setAddProductModalOpen(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
@@ -672,7 +703,7 @@ export function InventoryPage({
       {/* Floating Toast Notification */}
       {toastMsg && (
         <div className="toast-bar">
-          <Icon name="check" size={18} style={{ color: "#3FB950" } as React.CSSProperties} />
+          <Icon name="check" size={18} style={{ color: "var(--success-text)" } as React.CSSProperties} />
           <span>{toastMsg}</span>
         </div>
       )}

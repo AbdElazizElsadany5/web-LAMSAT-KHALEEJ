@@ -26,10 +26,10 @@ export function AdminAudit({
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: "#FFF", margin: "0 0 4px" }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--text)", margin: "0 0 4px" }}>
             سجل العمليات والرقابة الأمنية (Audit Trail)
           </h2>
-          <p style={{ fontSize: 13, color: "#888", margin: 0 }}>
+          <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>
             سجل محمي وغير قابل للتعديل يوثق كافة العمليات الحساسة مع الأسباب المسبقة
           </p>
         </div>
@@ -68,7 +68,7 @@ export function AdminAudit({
       </div>
 
       {/* Table */}
-      <div style={{ background: "#141414", border: "1px solid #2A2418", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
         <table className="data-table">
           <thead>
             <tr>
@@ -84,12 +84,12 @@ export function AdminAudit({
           <tbody>
             {filteredLogs.map((log) => (
               <tr key={log.id}>
-                <td style={{ fontFamily: "Inter", color: "#888" }}>{log.id}</td>
-                <td style={{ fontWeight: 700, color: "#FFF" }}>{log.user}</td>
+                <td style={{ fontFamily: "Inter", color: "var(--muted)" }}>{log.id}</td>
+                <td style={{ fontWeight: 700, color: "var(--text)" }}>{log.user}</td>
                 <td>{log.action}</td>
                 <td><span className="status-pill">{log.category}</span></td>
-                <td style={{ fontFamily: "Inter", fontSize: 12, color: "#AAA" }}>{log.timestamp}</td>
-                <td style={{ color: "#DDD", maxWidth: 280 }}>{log.reason || "—"}</td>
+                <td style={{ fontFamily: "Inter", fontSize: 12, color: "var(--text-secondary)" }}>{log.timestamp}</td>
+                <td style={{ color: "var(--text)", maxWidth: 280 }}>{log.reason || "—"}</td>
                 <td>
                   <span
                     className={`badge ${

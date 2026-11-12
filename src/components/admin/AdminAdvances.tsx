@@ -75,7 +75,7 @@ export function AdminAdvances({
 
   const handleSubmit = () => {
     if (!form.barberId || !form.amount || !form.reason) {
-      showToast("⚠️ الرجاء تعبئة جميع الحقول المطلوبة");
+      showToast("الرجاء تعبئة جميع الحقول المطلوبة");
       return;
     }
     const barber = barbers.find((b) => b.id === form.barberId);
@@ -96,7 +96,7 @@ export function AdminAdvances({
         status: form.status,
         paidAmount: Number(form.paidAmount) || 0,
       });
-      showToast("✅ تم تحديث السلفة بنجاح");
+      showToast("تم تحديث السلفة بنجاح");
     } else {
       onAdd({
         id: `ADV-${Date.now()}`,
@@ -112,15 +112,15 @@ export function AdminAdvances({
         paidAmount: Number(form.paidAmount) || 0,
         notes: form.notes,
       });
-      showToast("✅ تم تسجيل السلفة بنجاح");
+      showToast("تم تسجيل السلفة بنجاح");
     }
     setModalOpen(false);
   };
 
   const statusColor = (s: AdvanceRecord["status"]) => {
-    if (s === "مسدد") return "#3FB950";
-    if (s === "جزئي") return "#F5C242";
-    return "#E5484D";
+    if (s === "مسدد") return "var(--success-text)";
+    if (s === "جزئي") return "var(--light-gold)";
+    return "var(--danger-text)";
   };
 
   return (
@@ -135,20 +135,20 @@ export function AdminAdvances({
         }}
       >
         {[
-          { label: "إجمالي السلف", val: totalFiltered, color: "#E5484D" },
-          { label: "المُسدَّد", val: totalPaid, color: "#3FB950" },
-          { label: "المتبقي", val: totalRemaining, color: "#F5C242" },
+          { label: "إجمالي السلف", val: totalFiltered, color: "var(--danger-text)" },
+          { label: "المُسدَّد", val: totalPaid, color: "var(--success-text)" },
+          { label: "المتبقي", val: totalRemaining, color: "var(--light-gold)" },
         ].map((kpi) => (
           <div
             key={kpi.label}
             style={{
-              background: "#141414",
-              border: "1px solid #232323",
+              background: "var(--card)",
+              border: "1px solid var(--border)",
               borderRadius: 12,
               padding: "14px 18px",
             }}
           >
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>{kpi.label}</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{kpi.label}</div>
             <div style={{ fontSize: 22, fontWeight: 800, color: kpi.color }}>
               {kpi.val.toLocaleString("ar-EG")} ج.م
             </div>
@@ -202,10 +202,10 @@ export function AdminAdvances({
           style={{
             textAlign: "center",
             padding: "60px 0",
-            color: "#555",
-            background: "#111",
+            color: "var(--subtle)",
+            background: "var(--surface-2)",
             borderRadius: 12,
-            border: "1px dashed #222",
+            border: "1px dashed var(--border-strong)",
           }}
         >
           <Icon name="users" size={40} />
@@ -215,7 +215,7 @@ export function AdminAdvances({
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ borderBottom: "1px solid #222" }}>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
                 {["الموظف", "المبلغ", "السبب", "التاريخ", "المسجّل", "الحالة", "الإجراءات"].map((h) => (
                   <th
                     key={h}
@@ -223,7 +223,7 @@ export function AdminAdvances({
                       padding: "10px 12px",
                       textAlign: "right",
                       fontSize: 12,
-                      color: "#888",
+                      color: "var(--muted)",
                       fontWeight: 700,
                       whiteSpace: "nowrap",
                     }}
@@ -237,30 +237,30 @@ export function AdminAdvances({
               {filtered.map((adv) => (
                 <tr
                   key={adv.id}
-                  style={{ borderBottom: "1px solid #1A1A1A", transition: "background 0.15s" }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "#181818")}
+                  style={{ borderBottom: "1px solid var(--border-subtle)", transition: "background 0.15s" }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-soft)")}
                   onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "transparent")}
                 >
-                  <td style={{ padding: "12px", fontWeight: 700, color: "#FFF", fontSize: 14 }}>
+                  <td style={{ padding: "12px", fontWeight: 700, color: "var(--text)", fontSize: 14 }}>
                     {adv.barberName}
                   </td>
-                  <td style={{ padding: "12px", color: "#E5484D", fontWeight: 800, fontSize: 15 }}>
+                  <td style={{ padding: "12px", color: "var(--danger-text)", fontWeight: 800, fontSize: 15 }}>
                     {adv.amount.toLocaleString("ar-EG")} ج.م
                   </td>
-                  <td style={{ padding: "12px", color: "#CCC", fontSize: 13, maxWidth: 180 }}>
+                  <td style={{ padding: "12px", color: "var(--text-secondary)", fontSize: 13, maxWidth: 180 }}>
                     {adv.reason}
                   </td>
-                  <td style={{ padding: "12px", color: "#888", fontSize: 12, whiteSpace: "nowrap" }}>
+                  <td style={{ padding: "12px", color: "var(--muted)", fontSize: 12, whiteSpace: "nowrap" }}>
                     {adv.date}
                     <br />
-                    <span style={{ color: "#555" }}>{adv.time}</span>
+                    <span style={{ color: "var(--subtle)" }}>{adv.time}</span>
                   </td>
                   <td style={{ padding: "12px", fontSize: 12 }}>
-                    <span style={{ color: adv.registeredByRole === "admin" ? "#D4AF37" : "#6CBBFF" }}>
+                    <span style={{ color: adv.registeredByRole === "admin" ? "var(--gold)" : "var(--info-text)" }}>
                       {adv.registeredBy}
                     </span>
                     <br />
-                    <span style={{ color: "#555", fontSize: 11 }}>
+                    <span style={{ color: "var(--subtle)", fontSize: 11 }}>
                       {adv.registeredByRole === "admin" ? "أدمن" : "كاشير"}
                     </span>
                   </td>
@@ -285,9 +285,9 @@ export function AdminAdvances({
                         type="button"
                         onClick={() => openEdit(adv)}
                         style={{
-                          background: "#1E1E1E",
-                          border: "1px solid #333",
-                          color: "#F5C242",
+                          background: "var(--card-hover)",
+                          border: "1px solid var(--border)",
+                          color: "var(--light-gold)",
                           borderRadius: 8,
                           padding: "5px 10px",
                           fontSize: 12,
@@ -300,9 +300,9 @@ export function AdminAdvances({
                         type="button"
                         onClick={() => setDeleteConfirmId(adv.id)}
                         style={{
-                          background: "#1E1E1E",
-                          border: "1px solid #333",
-                          color: "#E5484D",
+                          background: "var(--card-hover)",
+                          border: "1px solid var(--border)",
+                          color: "var(--danger-text)",
                           borderRadius: 8,
                           padding: "5px 10px",
                           fontSize: 12,
@@ -336,16 +336,16 @@ export function AdminAdvances({
         >
           <div
             style={{
-              background: "#161616",
-              border: "1.5px solid #D4AF37",
+              background: "var(--surface-2)",
+              border: "1.5px solid var(--gold)",
               borderRadius: 18,
               padding: 28,
               width: "100%",
               maxWidth: 480,
             }}
           >
-            <h3 style={{ color: "#F5C242", margin: "0 0 20px", fontSize: 18, fontWeight: 800 }}>
-              {editingAdv ? "✏️ تعديل السلفة" : "💰 تسجيل سلفة جديدة"}
+            <h3 style={{ color: "var(--light-gold)", margin: "0 0 20px", fontSize: 18, fontWeight: 800 }}>
+              {editingAdv ? "تعديل السلفة" : "تسجيل سلفة جديدة"}
             </h3>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -439,9 +439,9 @@ export function AdminAdvances({
                 style={{
                   flex: 1,
                   height: 44,
-                  background: "#1E1E1E",
-                  border: "1px solid #333",
-                  color: "#CCC",
+                  background: "var(--card-hover)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
                   borderRadius: 10,
                   cursor: "pointer",
                   fontWeight: 700,
@@ -470,19 +470,19 @@ export function AdminAdvances({
         >
           <div
             style={{
-              background: "#181818",
-              border: "1.5px solid #E5484D",
+              background: "var(--surface-soft)",
+              border: "1.5px solid var(--danger-text)",
               borderRadius: 16,
               padding: 28,
               maxWidth: 380,
               textAlign: "center",
             }}
           >
-            <div style={{ color: "#E5484D", marginBottom: 12 }}>
+            <div style={{ color: "var(--danger-text)", marginBottom: 12 }}>
               <Icon name="alert" size={40} />
             </div>
-            <h3 style={{ color: "#FFF", margin: "0 0 8px", fontSize: 18 }}>تأكيد الحذف</h3>
-            <p style={{ color: "#888", fontSize: 14, marginBottom: 20 }}>
+            <h3 style={{ color: "var(--text)", margin: "0 0 8px", fontSize: 18 }}>تأكيد الحذف</h3>
+            <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 20 }}>
               هل تريد حذف هذه السلفة نهائياً؟ لا يمكن التراجع عن هذا الإجراء.
             </p>
             <div style={{ display: "flex", gap: 10 }}>
@@ -491,12 +491,12 @@ export function AdminAdvances({
                 onClick={() => {
                   onDelete(deleteConfirmId);
                   setDeleteConfirmId(null);
-                  showToast("🗑️ تم حذف السلفة");
+                  showToast("تم حذف السلفة");
                 }}
                 style={{
                   flex: 1,
                   height: 42,
-                  background: "#E5484D",
+                  background: "var(--danger-text)",
                   color: "#FFF",
                   border: "none",
                   borderRadius: 10,
@@ -513,9 +513,9 @@ export function AdminAdvances({
                 style={{
                   flex: 1,
                   height: 42,
-                  background: "#1E1E1E",
-                  border: "1px solid #333",
-                  color: "#CCC",
+                  background: "var(--card-hover)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
                   borderRadius: 10,
                   cursor: "pointer",
                   fontWeight: 700,
@@ -531,22 +531,8 @@ export function AdminAdvances({
 
       {/* Toast */}
       {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            background: "#1C1C1C",
-            border: "1px solid #333",
-            color: "#FFF",
-            padding: "10px 18px",
-            borderRadius: 10,
-            fontWeight: 700,
-            fontSize: 14,
-            zIndex: 999,
-          }}
-        >
-          {toast}
+        <div className="toast-bar">
+          <span>{toast}</span>
         </div>
       )}
     </div>

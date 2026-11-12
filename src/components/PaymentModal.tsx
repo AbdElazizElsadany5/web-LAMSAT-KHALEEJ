@@ -1,16 +1,21 @@
 import { useState, useMemo, useEffect } from "react";
-import { CartItem, PaymentMethod, Invoice, Coupon } from "../types";
+import { CartItem, PaymentMethod, Invoice } from "../types";
 import { Icon } from "./Icons";
 import { QrCode } from "./QrCode";
+import { ThermalReceiptHeader } from "./ReceiptLogo";
 import { sfx } from "../utils/audio";
 import { getThermalSettings, ThermalSettings } from "../utils/thermalSettings";
+import { getSalonSettings } from "../utils/salonSettings";
+import { executeReceiptPrint } from "../utils/printHelper";
+import { generateCustomerInvoiceQrUrl } from "../utils/qrInvoiceHelper";
+
+const WALLET_PROVIDERS = ["فودافون كاش", "إنستاباي", "أورنج كاش", "اتصالات كاش", "وي باي"];
 
 export function PaymentModal({
   cart,
   subtotal,
   onClose,
   onPaymentSuccess,
-  coupons,
   activeCashier,
   shiftId = 104,
 }: {
@@ -18,20 +23,17 @@ export function PaymentModal({
   subtotal: number;
   onClose: () => void;
   onPaymentSuccess: (invoice: Invoice) => void;
-  coupons: Coupon[];
   activeCashier: string;
   shiftId?: number;
 }) {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [couponCode, setCouponCode] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
-  const [couponError, setCouponError] = useState("");
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("نقداً");
   const [paidCash, setPaidCash] = useState<number>(subtotal);
-  const [splitCash, setSplitCash] = useState<number>(Math.floor(subtotal / 2));
-  const [splitCard, setSplitCard] = useState<number>(subtotal - Math.floor(subtotal / 2));
+  const [walletProvider, setWalletProvider] = useState<string>("");
+  const [walletSenderNumber, setWalletSenderNumber] = useState<string>("");
+  const [paymentError, setPaymentError] = useState<string>("");
   const [tip, setTip] = useState<number>(0);
 
   const [isSuccess, setIsSuccess] = useState(false);
@@ -44,77 +46,16 @@ export function PaymentModal({
     setThermalSettings(getThermalSettings());
   }, []);
 
-  // Helper functions for bulletproof coupon calculation
-  const getCouponValue = (c?: Coupon | null): number => {
-    if (!c) return 0;
-    const val = Number(c.discountValue ?? c.value ?? 0);
-    return isNaN(val) ? 0 : val;
-  };
-
-  const isPercentageCoupon = (c?: Coupon | null): boolean => {
-    if (!c) return false;
-    const t = c.discountType || c.type || "percentage";
-    return t === "percentage" || t === "نسبة";
-  };
-
-  const getCouponMinOrder = (c?: Coupon | null): number => {
-    if (!c) return 0;
-    const min = Number(c.minOrderValue ?? c.minOrder ?? 0);
-    return isNaN(min) ? 0 : min;
-  };
-
-  // Coupon discount calculation
-  const discountAmount = useMemo(() => {
-    if (!appliedCoupon) return 0;
-    const val = getCouponValue(appliedCoupon);
-    if (val <= 0) return 0;
-
-    if (isPercentageCoupon(appliedCoupon)) {
-      const calc = (subtotal * val) / 100;
-      const maxDiscount = appliedCoupon.maxDiscount ? Number(appliedCoupon.maxDiscount) : calc;
-      return Math.round(Math.min(calc, isNaN(maxDiscount) ? calc : maxDiscount));
-    }
-    return Math.min(val, subtotal);
-  }, [appliedCoupon, subtotal]);
-
   // Final Total
   const finalTotal = useMemo(() => {
-    const raw = subtotal - (isNaN(discountAmount) ? 0 : discountAmount) + (isNaN(tip) ? 0 : tip);
+    const raw = subtotal + (isNaN(tip) ? 0 : tip);
     return Math.max(0, isNaN(raw) ? subtotal : raw);
-  }, [subtotal, discountAmount, tip]);
+  }, [subtotal, tip]);
 
   // Update paidCash when total changes
   useEffect(() => {
     setPaidCash(finalTotal);
-    setSplitCash(Math.floor(finalTotal / 2));
-    setSplitCard(finalTotal - Math.floor(finalTotal / 2));
   }, [finalTotal]);
-
-  // Handle Apply Coupon
-  const handleApplyCoupon = (codeToApply?: string) => {
-    const code = (codeToApply || couponCode).trim().toUpperCase();
-    if (!code) return;
-    const match = coupons.find((c) => c.code.toUpperCase() === code);
-    if (!match) {
-      setCouponError("كود الكوبون غير صحيح");
-      setAppliedCoupon(null);
-      return;
-    }
-    if (match.status !== "نشط") {
-      setCouponError("هذا الكوبون غير مفعّل أو منتهي الصلاحية");
-      setAppliedCoupon(null);
-      return;
-    }
-    const minRequired = getCouponMinOrder(match);
-    if (subtotal < minRequired) {
-      setCouponError(`الحد الأدنى للطلب لتفعيل هذا الكوبون هو ${minRequired} ج.م`);
-      setAppliedCoupon(null);
-      return;
-    }
-    setCouponError("");
-    setAppliedCoupon(match);
-    setCouponCode(match.code);
-  };
 
   // Quick tender buttons for Cash
   const changeAmount = useMemo(() => {
@@ -133,19 +74,26 @@ export function PaymentModal({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSuccess, finalTotal, paymentMethod, paidCash, splitCash, splitCard]);
+  }, [isSuccess, finalTotal, paymentMethod, paidCash, walletProvider, walletSenderNumber]);
 
   // Execute Payment
   const handleExecutePayment = () => {
-    // Validation
-    if (paymentMethod === "دفع مختلط") {
-      if (splitCash + splitCard < finalTotal) {
-        alert("مجموع الدفع المختلط أقل من إجمالي الفاتورة المطلوب سداده!");
+    setPaymentError("");
+
+    if (paymentMethod === "نقداً" && paidCash < finalTotal) {
+      setPaymentError("المبلغ المدفوع نقداً أقل من الإجمالي المطلوب!");
+      return;
+    }
+
+    if (paymentMethod === "محافظ إلكترونية") {
+      if (!walletProvider) {
+        setPaymentError("يرجى الضغط على اسم المحفظة الإلكترونية أولاً.");
         return;
       }
-    } else if (paymentMethod === "نقداً" && paidCash < finalTotal) {
-      alert("المبلغ المدفوع نقداً أقل من الإجمالي المطلوب!");
-      return;
+      if (!walletSenderNumber.trim()) {
+        setPaymentError(`يرجى كتابة الرقم الذي حوّل العميل منه (${walletProvider}).`);
+        return;
+      }
     }
 
     const orderNumber = Math.floor(1000 + Math.random() * 9000);
@@ -156,7 +104,7 @@ export function PaymentModal({
       id: invoiceId,
       orderNumber,
       customerName: customerName.trim() || "عميل لمسة خليجي",
-      customerPhone: customerPhone.trim() || "01000000000",
+      customerPhone: "—",
       date: now.toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" }),
       time: now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
       items: cart.map((item) => ({
@@ -167,13 +115,12 @@ export function PaymentModal({
         commission: (item.price * 0.35) * item.qty,
       })),
       subtotal,
-      discount: discountAmount,
-      couponCode: appliedCoupon?.code,
+      discount: 0,
       tip,
       total: finalTotal,
       paymentMethod,
-      splitDetails:
-        paymentMethod === "دفع مختلط" ? { cash: splitCash, card: splitCard } : undefined,
+      walletProvider: paymentMethod === "محافظ إلكترونية" ? walletProvider : undefined,
+      walletSenderNumber: paymentMethod === "محافظ إلكترونية" ? walletSenderNumber.trim() : undefined,
       status: "مكتملة",
       cashierName: activeCashier,
       shiftId,
@@ -184,18 +131,39 @@ export function PaymentModal({
     setIsSuccess(true);
     sfx.playCashRegister();
     onPaymentSuccess(invoice);
+
+    // Auto-print receipt immediately after payment confirmation, then automatically close and return to POS
+    setTimeout(() => {
+      void triggerThermalPrint(false, true);
+    }, 250);
   };
 
-  // Simulate Thermal Printing
-  const handleSimulatePrint = () => {
+  // Print Thermal Receipt (Electron silent ESC/POS with controlled fallback and auto-close back to POS)
+  const triggerThermalPrint = async (allowDialogFallback = true, shouldAutoClose = true) => {
     sfx.playThermalPrint();
     setIsPrinting(true);
-    setPrintSuccessMsg("");
-    setTimeout(() => {
+    setPrintSuccessMsg("جارٍ طباعة الإيصال...");
+
+    try {
+      const res = await executeReceiptPrint({
+        allowDialogOnVirtualPrinter: allowDialogFallback,
+      });
+      setPrintSuccessMsg(`${res.message} — جارٍ العودة لشاشة الكاشير...`);
+      if (shouldAutoClose) {
+        setTimeout(() => {
+          onClose();
+        }, 650);
+      }
+    } catch {
+      if (shouldAutoClose) {
+        setTimeout(() => {
+          onClose();
+        }, 850);
+      }
+    } finally {
       setIsPrinting(false);
-      setPrintSuccessMsg("تم إرسال أمر الطباعة بنجاح إلى طابعة الإيصالات الحرارية (ESC/POS) وقص الورقة!");
-      setTimeout(() => setPrintSuccessMsg(""), 4000);
-    }, 1200);
+      setTimeout(() => setPrintSuccessMsg(""), 6000);
+    }
   };
 
   return (
@@ -211,183 +179,67 @@ export function PaymentModal({
                 : "حدد طريقة الدفع ومعلومات العميل لإصدار الفاتورة الضريبية"}
             </p>
           </div>
-          {!isSuccess && (
-            <button
-              type="button"
-              onClick={onClose}
-              style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
-            >
-              <Icon name="x" size={20} />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onClose}
+            title="إغلاق والرجوع لشاشة الكاشير (Esc)"
+            style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
+          >
+            <Icon name="x" size={20} />
+          </button>
         </div>
 
         {/* Modal Body */}
         <div className="modal-body">
           {!isSuccess ? (
             <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 24 }}>
-              {/* Left Column: Form, Payment Methods, Coupon */}
+              {/* Left Column: Form, Payment Methods */}
               <div>
                 {/* Customer Details */}
                 <div style={{ marginBottom: 18 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#AAA", marginBottom: 10 }}>
-                    معلومات العميل (اختيارية):
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8 }}>
+                    اسم العميل (اختياري):
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <div>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="اسم العميل (اختياري)"
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="tel"
-                        className="form-input"
-                        placeholder="رقم الهاتف (اختياري)"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Coupon Code Section */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#AAA", marginBottom: 8 }}>
-                    كود الخصم / الكوبون:
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="أدخل رمز الكوبون (مثلاً: KHALEEJI10)"
-                      value={couponCode}
-                      onChange={(e) => {
-                        setCouponCode(e.target.value);
-                        setCouponError("");
-                      }}
-                      style={{ textTransform: "uppercase" }}
-                    />
-                    <button
-                      type="button"
-                      className="secondary-btn"
-                      onClick={() => handleApplyCoupon()}
-                    >
-                      تطبيق
-                    </button>
-                  </div>
-
-                  {couponError && (
-                    <div style={{ fontSize: 12, color: "#FF8E92", marginTop: 4, fontWeight: 600 }}>
-                      {couponError}
-                    </div>
-                  )}
-
-                  {appliedCoupon && (
-                    <div
-                      style={{
-                        background: "rgba(63, 185, 80, 0.15)",
-                        border: "1px solid rgba(63, 185, 80, 0.35)",
-                        color: "#56D364",
-                        padding: "6px 12px",
-                        borderRadius: 8,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        marginTop: 8,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span>
-                        تم تفعيل الكوبون «{appliedCoupon.code}» — خصم {discountAmount} ج.م
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAppliedCoupon(null);
-                          setCouponCode("");
-                        }}
-                        style={{ background: "transparent", border: 0, color: "#FF8E92", cursor: "pointer" }}
-                      >
-                        <Icon name="x" size={14} />
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Quick Coupon Chips */}
-                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                    {coupons
-                      .filter((c) => c.status === "نشط")
-                      .map((c) => {
-                        const val = getCouponValue(c);
-                        const isPct = isPercentageCoupon(c);
-                        return (
-                          <button
-                            key={c.code}
-                            type="button"
-                            onClick={() => handleApplyCoupon(c.code)}
-                            style={{
-                              background: appliedCoupon?.code === c.code ? "rgba(212, 175, 55, 0.25)" : "#1C180E",
-                              border: `1px solid ${appliedCoupon?.code === c.code ? "#D4AF37" : "#4D3F1D"}`,
-                              color: appliedCoupon?.code === c.code ? "#FFF" : "#D4AF37",
-                              padding: "4px 10px",
-                              borderRadius: 6,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              cursor: "pointer",
-                            }}
-                          >
-                            {c.code} ({isPct ? `${val}%` : `${val} ج.م`})
-                          </button>
-                        );
-                      })}
-                  </div>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="اسم العميل (أو اتركه فارغاً: عميل لمسة خليجي)"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
                 </div>
 
                 {/* Payment Method Selector */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#AAA", marginBottom: 10 }}>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 10 }}>
                     طريقة السداد:
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-                    {(["نقداً", "بطاقة", "إنستاباي", "دفع مختلط"] as PaymentMethod[]).map((m) => (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    {(["نقداً", "محافظ إلكترونية"] as PaymentMethod[]).map((m) => (
                       <button
                         key={m}
                         type="button"
-                        onClick={() => setPaymentMethod(m)}
+                        onClick={() => {
+                          setPaymentMethod(m);
+                          setPaymentError("");
+                        }}
                         style={{
-                          height: 48,
-                          borderRadius: 10,
-                          background: paymentMethod === m ? "rgba(212, 175, 55, 0.2)" : "#161616",
-                          border: `1.5px solid ${paymentMethod === m ? "#D4AF37" : "#2B2418"}`,
-                          color: paymentMethod === m ? "#F5C242" : "#CCC",
-                          fontSize: 13,
-                          fontWeight: 700,
+                          height: 52,
+                          borderRadius: 12,
+                          background: paymentMethod === m ? "var(--gold-soft)" : "var(--surface-2)",
+                          border: `1.5px solid ${paymentMethod === m ? "var(--gold)" : "var(--border)"}`,
+                          color: paymentMethod === m ? "var(--light-gold)" : "var(--text-secondary)",
+                          fontSize: 14,
+                          fontWeight: 800,
                           display: "flex",
-                          flexDirection: "column",
                           alignItems: "center",
                           justifyContent: "center",
-                          gap: 2,
+                          gap: 8,
+                          cursor: "pointer",
                           transition: "all 0.16s",
                         }}
                       >
-                        <Icon
-                          name={
-                            m === "نقداً"
-                              ? "cash"
-                              : m === "بطاقة"
-                                ? "card"
-                                : m === "إنستاباي"
-                                  ? "wallet"
-                                  : "tag"
-                          }
-                          size={16}
-                        />
+                        <Icon name={m === "نقداً" ? "cash" : "wallet"} size={18} />
                         <span>{m}</span>
                       </button>
                     ))}
@@ -396,8 +248,8 @@ export function PaymentModal({
 
                 {/* Conditional Payment Method Inputs */}
                 {paymentMethod === "نقداً" && (
-                  <div style={{ background: "#161616", padding: 14, borderRadius: 10, border: "1px solid #2B2519" }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#DDD", marginBottom: 8 }}>
+                  <div style={{ background: "var(--surface-2)", padding: 14, borderRadius: 12, border: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
                       المبلغ المستلم نقداً من العميل:
                     </div>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
@@ -405,27 +257,30 @@ export function PaymentModal({
                         type="number"
                         className="form-input"
                         value={paidCash}
-                        onChange={(e) => setPaidCash(Number(e.target.value))}
-                        style={{ fontSize: 18, fontWeight: 700, color: "#F5C242" }}
+                        onChange={(e) => {
+                          setPaidCash(Number(e.target.value));
+                          if (paymentError) setPaymentError("");
+                        }}
+                        style={{ fontSize: 18, fontWeight: 700, color: "var(--light-gold)" }}
                       />
                       <button
                         type="button"
                         className="secondary-btn"
                         onClick={() => setPaidCash(finalTotal)}
-                        style={{ whiteSpace: "nowrap" }}
+                        style={{ whiteSpace: "nowrap", flexShrink: 0 }}
                       >
                         المبلغ بالضبط
                       </button>
                     </div>
 
                     {/* Quick Tender Presets */}
-                    <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                       {[50, 100, 200, 500].map((amt) => (
                         <button
                           key={amt}
                           type="button"
                           className="secondary-btn"
-                          style={{ height: 32, padding: "0 10px", fontSize: 12 }}
+                          style={{ height: 32, padding: "0 12px", fontSize: 12, whiteSpace: "nowrap" }}
                           onClick={() => setPaidCash(amt)}
                         >
                           {amt} ج.م
@@ -440,17 +295,18 @@ export function PaymentModal({
                         alignItems: "center",
                         justifyContent: "space-between",
                         paddingTop: 8,
-                        borderTop: "1px dashed #333",
+                        borderTop: "1px dashed var(--border-strong)",
                         fontSize: 14,
                         fontWeight: 700,
                       }}
                     >
-                      <span style={{ color: "#BBB" }}>المتبقي للعميل (الباقي):</span>
+                      <span style={{ color: "var(--text-secondary)" }}>المتبقي للعميل (الباقي):</span>
                       <span
                         style={{
                           fontSize: 18,
-                          color: changeAmount > 0 ? "#56D364" : "#BBB",
+                          color: changeAmount > 0 ? "var(--success-text)" : "var(--text-secondary)",
                           fontFamily: "Inter",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         {changeAmount} ج.م
@@ -459,54 +315,91 @@ export function PaymentModal({
                   </div>
                 )}
 
-                {paymentMethod === "دفع مختلط" && (
-                  <div style={{ background: "#161616", padding: 14, borderRadius: 10, border: "1px solid #2B2519" }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#DDD", marginBottom: 8 }}>
-                      توزيع مبالغ الدفع المختلط:
+                {paymentMethod === "محافظ إلكترونية" && (
+                  <div style={{ background: "var(--surface-2)", padding: 14, borderRadius: 12, border: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>
+                      اختر اسم المحفظة الإلكترونية:
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
-                      <div>
-                        <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4 }}>
-                          المبلغ نقداً:
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {WALLET_PROVIDERS.map((w) => {
+                        const isSelected = walletProvider === w;
+                        return (
+                          <button
+                            key={w}
+                            type="button"
+                            onClick={() => {
+                              setWalletProvider(w);
+                              setPaymentError("");
+                            }}
+                            style={{
+                              height: 38,
+                              padding: "0 14px",
+                              borderRadius: 10,
+                              border: `1.5px solid ${isSelected ? "var(--gold)" : "var(--border)"}`,
+                              background: isSelected ? "var(--gold)" : "var(--surface-soft)",
+                              color: isSelected ? "#111" : "var(--text)",
+                              fontSize: 13,
+                              fontWeight: 800,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                              transition: "all 0.15s",
+                            }}
+                          >
+                            {w}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {walletProvider && (
+                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed var(--border-strong)" }}>
+                        <label
+                          htmlFor="wallet-sender-input"
+                          style={{ fontSize: 12.5, fontWeight: 700, color: "var(--light-gold)", display: "block", marginBottom: 6 }}
+                        >
+                          اكتب الرقم اللي العميل حوّل منه ({walletProvider}):
                         </label>
                         <input
-                          type="number"
+                          id="wallet-sender-input"
+                          type="text"
                           className="form-input"
-                          value={splitCash}
+                          placeholder={walletProvider === "إنستاباي" ? "رقم الموبايل أو عنوان IPA (مثال: 010xxxxxxxx)" : "اكتب رقم الموبايل المُحوَّل منه..."}
+                          value={walletSenderNumber}
                           onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setSplitCash(val);
-                            setSplitCard(Math.max(0, finalTotal - val));
+                            setWalletSenderNumber(e.target.value);
+                            if (paymentError) setPaymentError("");
                           }}
+                          autoFocus
+                          style={{ fontFamily: "Inter, Cairo", fontSize: 14, fontWeight: 700 }}
                         />
                       </div>
-                      <div>
-                        <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4 }}>
-                          المبلغ بالبطاقة أو إنستاباي:
-                        </label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={splitCard}
-                          onChange={(e) => setSplitCard(Number(e.target.value))}
-                        />
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 12, color: "#888" }}>
-                      المجموع المدخل:{" "}
-                      <strong style={{ color: splitCash + splitCard === finalTotal ? "#56D364" : "#FF9F1C" }}>
-                        {splitCash + splitCard} / {finalTotal} ج.م
-                      </strong>
-                    </div>
+                    )}
+                  </div>
+                )}
+
+                {paymentError && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      background: "var(--danger-soft)",
+                      border: "1px solid var(--danger-border)",
+                      color: "var(--danger-text)",
+                      padding: "9px 12px",
+                      borderRadius: 10,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {paymentError}
                   </div>
                 )}
 
                 {/* Barber Tip Field */}
                 <div style={{ marginTop: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#AAA", marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8 }}>
                     إكرامية الحلاق (اختياري):
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {[0, 10, 20, 50].map((t) => (
                       <button
                         key={t}
@@ -516,11 +409,13 @@ export function PaymentModal({
                           height: 36,
                           padding: "0 14px",
                           borderRadius: 8,
-                          background: tip === t ? "#D4AF37" : "#1A1A1A",
-                          color: tip === t ? "#111" : "#CCC",
-                          border: `1px solid ${tip === t ? "#D4AF37" : "#333"}`,
+                          background: tip === t ? "var(--gold)" : "var(--card-hover)",
+                          color: tip === t ? "#111" : "var(--text-secondary)",
+                          border: `1px solid ${tip === t ? "var(--gold)" : "var(--border)"}`,
                           fontWeight: 700,
                           fontSize: 13,
+                          whiteSpace: "nowrap",
+                          cursor: "pointer",
                         }}
                       >
                         {t === 0 ? "بدون إكرامية" : `+${t} ج.م`}
@@ -533,8 +428,8 @@ export function PaymentModal({
               {/* Right Column: Order Items Summary & Total */}
               <div
                 style={{
-                  background: "#161616",
-                  border: "1px solid #2B2519",
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--border)",
                   borderRadius: 14,
                   padding: 18,
                   display: "flex",
@@ -547,9 +442,9 @@ export function PaymentModal({
                     style={{
                       fontSize: 15,
                       fontWeight: 800,
-                      color: "#FFF",
+                      color: "var(--text)",
                       paddingBottom: 10,
-                      borderBottom: "1px solid #28241B",
+                      borderBottom: "1px solid var(--border)",
                       marginBottom: 12,
                     }}
                   >
@@ -565,18 +460,18 @@ export function PaymentModal({
                           justifyContent: "space-between",
                           fontSize: 13,
                           paddingBottom: 8,
-                          borderBottom: "1px dashed #222",
+                          borderBottom: "1px dashed var(--border-strong)",
                         }}
                       >
                         <div>
-                          <div style={{ fontWeight: 700, color: "#EEE" }}>
+                          <div style={{ fontWeight: 700, color: "var(--text)" }}>
                             {item.name} {item.qty > 1 && `(×${item.qty})`}
                           </div>
-                          <div style={{ fontSize: 11, color: "#888" }}>
-                            الحلاق: <span style={{ color: "#D4AF37" }}>{item.barberName}</span>
+                          <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                            الحلاق: <span style={{ color: "var(--gold)" }}>{item.barberName}</span>
                           </div>
                         </div>
-                        <div style={{ fontWeight: 700, color: "#F5C242", fontFamily: "Inter" }}>
+                        <div style={{ fontWeight: 700, color: "var(--light-gold)", fontFamily: "Inter" }}>
                           {item.price * item.qty} ج.م
                         </div>
                       </div>
@@ -585,21 +480,14 @@ export function PaymentModal({
                 </div>
 
                 {/* Calculation breakdown */}
-                <div style={{ borderTop: "1px solid #28241B", paddingTop: 14, marginTop: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#AAA", marginBottom: 6 }}>
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-secondary)", marginBottom: 6 }}>
                     <span>المجموع الفرعي:</span>
                     <span className="num">{subtotal} ج.م</span>
                   </div>
 
-                  {discountAmount > 0 && (
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#56D364", marginBottom: 6 }}>
-                      <span>الخصم المطبق ({appliedCoupon?.code}):</span>
-                      <span className="num">-{discountAmount} ج.م</span>
-                    </div>
-                  )}
-
                   {tip > 0 && (
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#FF9F1C", marginBottom: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--warning-text)", marginBottom: 6 }}>
                       <span>إكرامية الحلاق:</span>
                       <span className="num">+{tip} ج.م</span>
                     </div>
@@ -610,13 +498,14 @@ export function PaymentModal({
                       display: "flex",
                       alignItems: "baseline",
                       justifyContent: "space-between",
+                      gap: 10,
                       marginTop: 10,
                       paddingTop: 10,
-                      borderTop: "1px solid #332B1E",
+                      borderTop: "1px solid var(--border-strong)",
                     }}
                   >
-                    <span style={{ fontSize: 16, fontWeight: 800, color: "#FFF" }}>المبلغ الإجمالي المطلوب:</span>
-                    <div style={{ fontSize: 28, fontWeight: 900, color: "#F5C242", fontFamily: "Inter" }}>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap" }}>المبلغ الإجمالي المطلوب:</span>
+                    <div style={{ fontSize: 26, fontWeight: 900, color: "var(--light-gold)", fontFamily: "Inter", whiteSpace: "nowrap" }}>
                       {finalTotal} <small style={{ fontSize: 14, fontFamily: "Cairo" }}>ج.م</small>
                     </div>
                   </div>
@@ -654,11 +543,17 @@ export function PaymentModal({
                     <Icon name="check" size={24} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: "#56D364" }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "var(--success-text)" }}>
                       تم الدفع وإصدار الفاتورة بنجاح!
                     </div>
-                    <div style={{ fontSize: 13, color: "#CCC", marginTop: 2 }}>
-                      رقم الفاتورة: <strong style={{ color: "#FFF", fontFamily: "Inter" }}>{createdInvoice?.id}</strong> • طريقة الدفع: {createdInvoice?.paymentMethod}
+                    <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>
+                      رقم الفاتورة: <strong style={{ color: "var(--text)", fontFamily: "Inter" }}>{createdInvoice?.id}</strong> • طريقة الدفع:{" "}
+                      {createdInvoice?.walletProvider
+                        ? `${createdInvoice.paymentMethod} (${createdInvoice.walletProvider})`
+                        : createdInvoice?.paymentMethod}
+                      {createdInvoice?.walletSenderNumber && (
+                        <> • محوّل من: <strong style={{ fontFamily: "Inter", color: "var(--text)" }}>{createdInvoice.walletSenderNumber}</strong></>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -667,16 +562,11 @@ export function PaymentModal({
                   <button
                     type="button"
                     className="primary-btn"
-                    onClick={() => {
-                      handleSimulatePrint();
-                      setTimeout(() => {
-                        window.print();
-                      }, 500);
-                    }}
+                    onClick={() => void triggerThermalPrint(true, true)}
                     disabled={isPrinting}
                   >
                     <Icon name="printer" size={17} />
-                    <span>{isPrinting ? "جارٍ الإرسال للطابعة..." : "طباعة الإيصال الحراري"}</span>
+                    <span>{isPrinting ? "جارٍ الطباعة..." : "إعادة طباعة الإيصال"}</span>
                   </button>
                   <button
                     type="button"
@@ -692,9 +582,9 @@ export function PaymentModal({
               {printSuccessMsg && (
                 <div
                   style={{
-                    background: "#1E1A12",
-                    border: "1px solid #D4AF37",
-                    color: "#F5C242",
+                    background: "var(--gold-soft)",
+                    border: "1px solid var(--gold)",
+                    color: "var(--light-gold)",
                     padding: "10px 16px",
                     borderRadius: 8,
                     fontSize: 13,
@@ -703,71 +593,99 @@ export function PaymentModal({
                     textAlign: "center",
                   }}
                 >
-                  ✓ {printSuccessMsg}
+                  {printSuccessMsg}
                 </div>
               )}
 
               {/* Thermal Receipt Slip Simulator */}
-              <div style={{ display: "flex", justifyContent: "center" }}>
+              <div style={{ display: "flex", justifyContent: "center", paddingBottom: 12 }}>
                 <div
                   className={`thermal-paper ${thermalSettings.paperWidth === "58mm" ? "narrow" : ""}`}
                   style={{
-                    width: thermalSettings.paperWidth === "58mm" ? 210 : 300,
-                    padding: thermalSettings.paperWidth === "58mm" ? "14px 10px" : "22px 18px",
+                    width: thermalSettings.paperWidth === "58mm" ? 216 : 308,
+                    padding: thermalSettings.paperWidth === "58mm" ? "16px 12px 20px" : "22px 18px 26px",
                     fontSize: thermalSettings.paperWidth === "58mm" ? 10.5 : 12,
+                    border: "1px solid #DFD9C9",
+                    borderRadius: 6,
                   }}
                 >
-                  <div className="thermal-paper-header">
-                    <div
-                      className="thermal-paper-logo"
-                      style={{ fontSize: thermalSettings.paperWidth === "58mm" ? 15 : 18 }}
-                    >
-                      {thermalSettings.headerTitle || "صالون لمسة"}
-                    </div>
-                    <div className="thermal-paper-tagline">أناقتك تبدأ من هنا</div>
-                    <div style={{ fontSize: 10, color: "#444", marginTop: 4 }}>
-                      {thermalSettings.shopAddress}
-                    </div>
-                    <div style={{ fontSize: 9.5, color: "#666", fontFamily: "Inter" }}>
-                      {thermalSettings.taxId}
-                    </div>
-                  </div>
+                  <ThermalReceiptHeader
+                    title={thermalSettings.headerTitle || "لمسة خليجي"}
+                    address={thermalSettings.shopAddress}
+                    phone={getSalonSettings().phone}
+                    taxId={thermalSettings.taxId}
+                    isNarrow={thermalSettings.paperWidth === "58mm"}
+                  />
 
-                  <hr className="thermal-divider" />
-
-                  <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span>رقم الفاتورة:</span>
-                    <strong style={{ fontFamily: "Inter" }}>{createdInvoice?.id}</strong>
+                  <div
+                    style={{
+                      background: "#F5F2EA",
+                      border: "1px solid #E3DEC9",
+                      borderRadius: 6,
+                      padding: "7px 9px",
+                      marginBottom: 10,
+                      fontSize: 11,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 3,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#555" }}>رقم الفاتورة:</span>
+                      <strong style={{ fontFamily: "Inter", color: "#000" }}>{createdInvoice?.id}</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#555" }}>التاريخ والوقت:</span>
+                      <span style={{ color: "#1A1A1A" }}>{createdInvoice?.date} - {createdInvoice?.time}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#555" }}>مسؤول الوردية:</span>
+                      <span style={{ color: "#1A1A1A" }}>{createdInvoice?.cashierName} (#{createdInvoice?.shiftId})</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#555" }}>العميل:</span>
+                      <span style={{ fontWeight: 700, color: "#000" }}>{createdInvoice?.customerName}</span>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span>التاريخ والوقت:</span>
-                    <span>{createdInvoice?.date} - {createdInvoice?.time}</span>
-                  </div>
-                  <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span>الكاشير المناوب:</span>
-                    <span>{createdInvoice?.cashierName} (الوردية #{createdInvoice?.shiftId})</span>
-                  </div>
-                  <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span>العميل:</span>
-                    <span>{createdInvoice?.customerName}</span>
-                  </div>
-
-                  <hr className="thermal-divider" />
 
                   {/* Items Table */}
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, borderBottom: "1px solid #666", paddingBottom: 4, marginBottom: 6 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontWeight: 800,
+                        borderTop: "1px dashed #666",
+                        borderBottom: "1.5px solid #1A1A1A",
+                        padding: "5px 0",
+                        marginBottom: 7,
+                        fontSize: 11.5,
+                      }}
+                    >
                       <span>الخدمة / الحلاق</span>
                       <span>السعر</span>
                     </div>
 
                     {createdInvoice?.items.map((it, idx) => (
-                      <div key={idx} className="thermal-item-row">
+                      <div
+                        key={idx}
+                        className="thermal-item-row"
+                        style={{
+                          paddingBottom: 6,
+                          marginBottom: 6,
+                          borderBottom: idx < (createdInvoice.items.length - 1) ? "1px dotted #C8C2B4" : "none",
+                          alignItems: "flex-start",
+                        }}
+                      >
                         <div>
-                          <div style={{ fontWeight: 700 }}>{it.name} {it.qty > 1 && `(×${it.qty})`}</div>
-                          <div className="thermal-barber-tag">الحلاق: {it.barber}</div>
+                          <div style={{ fontWeight: 700, color: "#000" }}>
+                            {it.name} {it.qty > 1 && `(×${it.qty})`}
+                          </div>
+                          <div className="thermal-barber-tag" style={{ marginRight: 0, marginTop: 1 }}>
+                            الحلاق: {it.barber}
+                          </div>
                         </div>
-                        <div style={{ fontWeight: 700, fontFamily: "Inter" }}>
+                        <div style={{ fontWeight: 800, fontFamily: "Inter", color: "#000", whiteSpace: "nowrap" }}>
                           {it.price * it.qty} ج.م
                         </div>
                       </div>
@@ -776,34 +694,54 @@ export function PaymentModal({
 
                   <hr className="thermal-divider" />
 
-                  <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                    <span>المجموع الفرعي:</span>
-                    <span style={{ fontFamily: "Inter" }}>{createdInvoice?.subtotal} ج.م</span>
+                  <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ color: "#444" }}>المجموع الفرعي:</span>
+                    <span style={{ fontFamily: "Inter", fontWeight: 700 }}>{createdInvoice?.subtotal} ج.م</span>
                   </div>
 
                   {(createdInvoice?.discount ?? 0) > 0 && (
-                    <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 2, color: "#006600" }}>
+                    <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 3, color: "#006600" }}>
                       <span>خصم الكوبون ({createdInvoice?.couponCode}):</span>
-                      <span style={{ fontFamily: "Inter" }}>-{createdInvoice?.discount} ج.م</span>
+                      <span style={{ fontFamily: "Inter", fontWeight: 700 }}>-{createdInvoice?.discount} ج.م</span>
                     </div>
                   )}
 
                   {(createdInvoice?.tip ?? 0) > 0 && (
-                    <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                      <span>إكرامية الحلاق:</span>
-                      <span style={{ fontFamily: "Inter" }}>+{createdInvoice?.tip} ج.م</span>
+                    <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                      <span style={{ color: "#444" }}>إكرامية الحلاق:</span>
+                      <span style={{ fontFamily: "Inter", fontWeight: 700 }}>+{createdInvoice?.tip} ج.م</span>
                     </div>
                   )}
 
-                  <div className="thermal-total-row">
+                  <div
+                    className="thermal-total-row"
+                    style={{
+                      background: "#F5F2EA",
+                      border: "1.5px solid #1A1A1A",
+                      borderRadius: 6,
+                      padding: "7px 9px",
+                      marginTop: 7,
+                      fontSize: thermalSettings.paperWidth === "58mm" ? 13 : 15,
+                    }}
+                  >
                     <span>الإجمالي النهائي المسدد:</span>
                     <span style={{ fontFamily: "Inter" }}>{createdInvoice?.total} ج.م</span>
                   </div>
 
-                  <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-                    <span>طريقة الدفع:</span>
-                    <span>{createdInvoice?.paymentMethod}</span>
+                  <div style={{ fontSize: 11, display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                    <span style={{ color: "#444" }}>طريقة الدفع:</span>
+                    <strong style={{ color: "#000" }}>
+                      {createdInvoice?.walletProvider
+                        ? `${createdInvoice.paymentMethod} (${createdInvoice.walletProvider})`
+                        : createdInvoice?.paymentMethod}
+                    </strong>
                   </div>
+                  {createdInvoice?.walletSenderNumber && (
+                    <div style={{ fontSize: 10.5, display: "flex", justifyContent: "space-between", marginTop: 3 }}>
+                      <span style={{ color: "#444" }}>الرقم المُحوَّل منه:</span>
+                      <strong style={{ color: "#000", fontFamily: "Inter" }}>{createdInvoice.walletSenderNumber}</strong>
+                    </div>
+                  )}
 
                   {/* Catalog Marketing Section if enabled */}
                   {thermalSettings.printMode === "services_and_catalog" && (
@@ -818,7 +756,7 @@ export function PaymentModal({
                       }}
                     >
                       <div style={{ textAlign: "center", fontWeight: 800, fontSize: 11, color: "#000", marginBottom: 3 }}>
-                        ✂️ عروض صالون لمسة القادمة ✂️
+                        عروض لمسة خليجي القادمة
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 9.5 }}>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -839,18 +777,36 @@ export function PaymentModal({
 
                   <hr className="thermal-divider" />
 
-                  {/* Real Authentic QR Code Generator */}
-                  <div style={{ textAlign: "center", margin: "10px 0 6px" }}>
+                  {/* Real Authentic QR Code Generator (Scan to View Invoice & Services Menu) */}
+                  <div style={{ textAlign: "center", margin: "10px 0 8px" }}>
                     <QrCode
-                      value={`${thermalSettings.headerTitle}|${thermalSettings.taxId}|${createdInvoice?.id}|${createdInvoice?.total}|${createdInvoice?.date}`}
-                      size={thermalSettings.paperWidth === "58mm" ? 68 : 82}
+                      value={createdInvoice ? generateCustomerInvoiceQrUrl(createdInvoice) : `${thermalSettings.headerTitle}|${thermalSettings.taxId}`}
+                      size={thermalSettings.paperWidth === "58mm" ? 72 : 84}
                     />
-                    <div style={{ fontSize: 8.5, color: "#555", marginTop: 4, fontWeight: 600 }}>
-                      فاتورة إلكترونية معتمدة • مصلحة الضرائب المصرية
+                    <div style={{ fontSize: 9.5, color: "#111", marginTop: 6, fontWeight: 800 }}>
+                      امسح الكود بكاميرا الموبايل لعرض فاتورتك وقائمة خدمات الصالون
                     </div>
+                    {createdInvoice && (
+                      <a
+                        href={generateCustomerInvoiceQrUrl(createdInvoice)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="no-print"
+                        style={{
+                          fontSize: 9.5,
+                          color: "#6A5726",
+                          textDecoration: "underline",
+                          display: "inline-block",
+                          marginTop: 3,
+                          cursor: "pointer",
+                        }}
+                      >
+                        [ تجربة ومعاينة صفحة الفاتورة الآن ]
+                      </a>
+                    )}
                   </div>
 
-                  <div style={{ textAlign: "center", fontSize: 10, color: "#444", marginTop: 8 }}>
+                  <div style={{ textAlign: "center", fontSize: 10.5, fontWeight: 700, color: "#222", marginTop: 6 }}>
                     {thermalSettings.footerMsg || "شكراً لزيارتكم • أناقتك تبدأ من هنا"}
                   </div>
                 </div>

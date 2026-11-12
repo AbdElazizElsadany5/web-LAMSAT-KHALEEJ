@@ -12,9 +12,12 @@ export type Barber = {
   status: BarberAvailability;
   checkInTime: string;
   checkOutTime: string;
+  scheduledStartTime?: string; // 24h "HH:MM" set by Admin for next day / shift
+  canStartShift?: boolean; // Whether Admin authorizes this employee to start shifts
   pin: string;
   salaryType: "ثابت";
   basicSalary: number;
+  salaryCycle?: "monthly" | "weekly" | "daily"; // Payout cycle: monthly / weekly / daily
   completedToday: number;
   revenueToday: number;
   rating: number;
@@ -60,7 +63,7 @@ export type CartItem = {
   barberName: string;
 };
 
-export type PaymentMethod = "نقداً" | "بطاقة" | "إنستاباي" | "دفع مختلط";
+export type PaymentMethod = "نقداً" | "محافظ إلكترونية" | "بطاقة" | "إنستاباي" | "دفع مختلط";
 
 export type InvoiceStatus = "مكتملة" | "معلقة" | "ملغاة" | "مسترجعة";
 
@@ -86,6 +89,8 @@ export type Invoice = {
   tip: number;
   total: number;
   paymentMethod: PaymentMethod;
+  walletProvider?: string;
+  walletSenderNumber?: string;
   splitDetails?: { cash: number; card: number };
   status: InvoiceStatus;
   cashierName: string;
@@ -160,12 +165,14 @@ export type AttendanceRecord = {
   barberId: string;
   barberName: string;
   date: string;
+  scheduledTime?: string;
   checkIn: string;
   checkOut: string;
   workingHours?: number;
   hoursWorked?: number;
   lateMinutes?: number;
   minutesLate?: number;
+  lateDeduction?: number;
   status: "حاضر" | "في استراحة" | "منصرف" | "لم يحضر";
   correctionNote?: string;
 };
@@ -175,7 +182,12 @@ export type ShiftRecord = {
   cashierName: string;
   openTime: string;
   startTime?: string;
+  startTimestamp?: number;
+  startDate?: string;
   closeTime?: string;
+  closeDate?: string;
+  closeTimestamp?: number;
+  durationText?: string;
   openingCash: number;
   initialCash?: number;
   cashSales: number;
@@ -242,4 +254,17 @@ export type AdvanceRecord = {
   paidAmount?: number;
   notes?: string;
 };
+
+export type CashOutCategory = "سلفة موظف" | "مصاريف تشغيل ونثريات" | "مسحوبات إدارة" | "أخرى";
+
+export type CashOutPayload = {
+  amount: number;
+  category: CashOutCategory;
+  recipient: string;
+  reason: string;
+  notes?: string;
+  barberId?: string;
+  shouldPrint?: boolean;
+};
+
 

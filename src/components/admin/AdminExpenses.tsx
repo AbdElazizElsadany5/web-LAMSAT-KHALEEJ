@@ -49,11 +49,11 @@ export function AdminExpenses({
       {/* Header Bar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: "#FFF", margin: "0 0 4px" }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--text)", margin: "0 0 4px" }}>
             إدارة المصروفات اليومية والنثريات
           </h2>
-          <p style={{ fontSize: 13, color: "#888", margin: 0 }}>
-            إجمالي المصروفات المسجلة: <strong style={{ color: "#E5484D", fontFamily: "Inter" }}>{totalExpenses.toLocaleString()} ج.م</strong>
+          <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>
+            إجمالي المصروفات المسجلة: <strong style={{ color: "var(--danger-text)", fontFamily: "Inter" }}>{totalExpenses.toLocaleString()} ج.م</strong>
           </p>
         </div>
         <button
@@ -68,7 +68,7 @@ export function AdminExpenses({
       </div>
 
       {/* Expenses Table */}
-      <div style={{ background: "#141414", border: "1px solid #2A2418", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
         <table className="data-table">
           <thead>
             <tr>
@@ -84,13 +84,13 @@ export function AdminExpenses({
           <tbody>
             {expenses.map((e) => (
               <tr key={e.id}>
-                <td style={{ fontWeight: 700, color: "#FFF" }}>{e.title}</td>
+                <td style={{ fontWeight: 700, color: "var(--text)" }}>{e.title}</td>
                 <td>{e.category}</td>
-                <td style={{ fontFamily: "Inter", fontWeight: 800, color: "#E5484D" }}>
+                <td style={{ fontFamily: "Inter", fontWeight: 800, color: "var(--danger-text)" }}>
                   {e.amount.toLocaleString()} ج.م
                 </td>
                 <td>{e.paymentSource}</td>
-                <td style={{ fontSize: 12, color: "#AAA" }}>{e.date} - {e.time}</td>
+                <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{e.date} - {e.time}</td>
                 <td>{e.registeredBy}</td>
                 <td>
                   <span className={`status-pill ${e.deductedFromDrawer ? "active" : "inactive"}`}>
@@ -105,60 +105,142 @@ export function AdminExpenses({
 
       {/* Add Expense Modal */}
       {modalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: 440 }}>
+        <div className="modal-overlay" onClick={() => setModalOpen(false)}>
+          <div className="modal-box" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <h2>تسجيل مصروف جديد</h2>
-              <button type="button" onClick={() => setModalOpen(false)} style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: "rgba(229, 72, 77, 0.12)",
+                    color: "var(--danger-text)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Icon name="dollarSign" size={18} />
+                </span>
+                <div>
+                  <h2 style={{ fontSize: 17, margin: 0 }}>تسجيل مصروف جديد</h2>
+                  <p style={{ fontSize: 12, color: "var(--muted)", margin: "2px 0 0" }}>
+                    توثيق المصروفات التشغيلية والنثرية وخصمها من الخزينة
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer", padding: 4 }}
+              >
                 <Icon name="x" size={18} />
               </button>
             </div>
-            <form onSubmit={handleCreateExpense}>
-              <div className="form-group">
-                <label className="form-label">بيان المصروف:</label>
-                <input type="text" className="form-input" placeholder="مثال: شراء مناديل وشامبو للغسيل" value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
-              </div>
+            <form onSubmit={handleCreateExpense} style={{ display: "flex", flexDirection: "column", flex: 1, margin: 0 }}>
+              <div className="modal-body" style={{ gap: 14 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">بيان المصروف *:</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="مثال: شراء مناديل وشامبو للغسيل"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">التصنيف:</label>
-                  <select className="form-input" value={category} onChange={(e) => setCategory(e.target.value)}>
-                    <option value="مستلزمات تشغيل">مستلزمات تشغيل ونظافة</option>
-                    <option value="ضيافة وبوفيه">ضيافة وبوفيه عملاء</option>
-                    <option value="صيانة أجهزة">صيانة ماكينات وأجهزة</option>
-                    <option value="فواتير وخدمات">فواتير كهرباء ومياه</option>
-                    <option value="أخرى">أخرى</option>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">التصنيف:</label>
+                    <select className="form-input" value={category} onChange={(e) => setCategory(e.target.value)}>
+                      <option value="مستلزمات تشغيل">مستلزمات تشغيل ونظافة</option>
+                      <option value="ضيافة وبوفيه">ضيافة وبوفيه عملاء</option>
+                      <option value="صيانة أجهزة">صيانة ماكينات وأجهزة</option>
+                      <option value="فواتير وخدمات">فواتير كهرباء ومياه</option>
+                      <option value="أخرى">أخرى</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">المبلغ (ج.م) *:</label>
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={amount || ""}
+                        onChange={(e) => setAmount(Number(e.target.value))}
+                        style={{ paddingLeft: 46, fontFamily: "Inter, Cairo", fontSize: 15, fontWeight: 700 }}
+                        placeholder="0"
+                        required
+                      />
+                      <span
+                        style={{
+                          position: "absolute",
+                          left: 14,
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: "var(--light-gold)",
+                          pointerEvents: "none",
+                        }}
+                      >
+                        ج.م
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">طريقة السداد ومصدر الخصم:</label>
+                  <select className="form-input" value={paymentSource} onChange={(e) => setPaymentSource(e.target.value as any)}>
+                    <option value="درج النقدية (الوردية)">درج النقدية (خصم مباشر من الكاشير)</option>
+                    <option value="تحويل بنكي / إنستاباي">إنستاباي / تحويل بنكي</option>
+                    <option value="الحساب البنكي الرئيسي">الحساب البنكي الرئيسي للصالون</option>
                   </select>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">المبلغ (ج.م):</label>
-                  <input type="number" className="form-input" value={amount} onChange={(e) => setAmount(Number(e.target.value))} required />
-                </div>
+
+                {paymentSource?.includes("درج") && (
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      background: deductDrawer ? "rgba(229, 72, 77, 0.08)" : "var(--surface-soft)",
+                      border: `1.5px solid ${deductDrawer ? "rgba(229, 72, 77, 0.4)" : "var(--border)"}`,
+                      cursor: "pointer",
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      color: "var(--text)",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={deductDrawer}
+                      onChange={(e) => setDeductDrawer(e.target.checked)}
+                      style={{ width: 17, height: 17, accentColor: "var(--danger)" }}
+                    />
+                    <span>خصم المبلغ تلقائياً من عهدة الكاشير بالوردية الحالية</span>
+                  </label>
+                )}
               </div>
 
-              <div className="form-group">
-                <label className="form-label">طريقة السداد:</label>
-                <select className="form-input" value={paymentSource} onChange={(e) => setPaymentSource(e.target.value as any)}>
-                  <option value="درج النقدية (الوردية)">درج النقدية (خصم مباشر من الكاشير)</option>
-                  <option value="تحويل بنكي / إنستاباي">إنستاباي / تحويل بنكي</option>
-                  <option value="الحساب البنكي الرئيسي">الحساب البنكي الرئيسي للصالون</option>
-                </select>
-              </div>
-
-              {paymentSource?.includes("درج") && (
-                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#DDD", cursor: "pointer", marginTop: 4 }}>
-                  <input type="checkbox" checked={deductDrawer} onChange={(e) => setDeductDrawer(e.target.checked)} />
-                  <span>خصم المبلغ تلقائياً من عهدة الكاشير بالوردية الحالية</span>
-                </label>
-              )}
-
-              <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-                <button type="submit" className="primary-btn" style={{ flex: 1, height: 42 }}>
+              <div className="modal-foot">
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => setModalOpen(false)}
+                  style={{ height: 42, padding: "0 20px" }}
+                >
+                  إلغاء
+                </button>
+                <button type="submit" className="primary-btn" style={{ height: 42, padding: "0 24px", gap: 6 }}>
                   <span>حفظ المصروف</span>
                   <Icon name="check" size={16} />
-                </button>
-                <button type="button" className="secondary-btn" onClick={() => setModalOpen(false)} style={{ height: 42 }}>
-                  إلغاء
                 </button>
               </div>
             </form>

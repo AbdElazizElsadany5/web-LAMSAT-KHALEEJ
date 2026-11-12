@@ -1,12 +1,21 @@
 import { useState, useEffect } from "react";
 import { Icon } from "../Icons";
 import { QrCode } from "../QrCode";
+import { ThermalReceiptHeader } from "../ReceiptLogo";
 import { sfx } from "../../utils/audio";
+import { getSalonSettings } from "../../utils/salonSettings";
 import {
   ThermalSettings,
   getThermalSettings,
   saveThermalSettings,
 } from "../../utils/thermalSettings";
+import {
+  SystemPrinterInfo,
+  executeReceiptPrint,
+  getAvailablePrinters,
+  isVirtualPdfPrinter,
+} from "../../utils/printHelper";
+import { generateCustomerInvoiceQrUrl } from "../../utils/qrInvoiceHelper";
 
 export function AdminThermal({
   onShowToast,
@@ -20,6 +29,18 @@ export function AdminThermal({
   const [footerMsg, setFooterMsg] = useState(initial.footerMsg);
   const [shopAddress, setShopAddress] = useState(initial.shopAddress);
   const [taxId, setTaxId] = useState(initial.taxId);
+  const [printerName, setPrinterName] = useState(initial.printerName || "");
+  const [silentPrint, setSilentPrint] = useState(initial.silentPrint !== false);
+  const [printers, setPrinters] = useState<SystemPrinterInfo[]>([]);
+
+  const loadPrinters = async () => {
+    const list = await getAvailablePrinters();
+    setPrinters(list);
+  };
+
+  useEffect(() => {
+    void loadPrinters();
+  }, []);
 
   // Auto-save whenever any setting changes
   useEffect(() => {
@@ -30,8 +51,10 @@ export function AdminThermal({
       footerMsg,
       shopAddress,
       taxId,
+      printerName,
+      silentPrint,
     });
-  }, [printMode, paperWidth, headerTitle, footerMsg, shopAddress, taxId]);
+  }, [printMode, paperWidth, headerTitle, footerMsg, shopAddress, taxId, printerName, silentPrint]);
 
   const handleTestPrint = () => {
     saveThermalSettings({
@@ -41,13 +64,19 @@ export function AdminThermal({
       footerMsg,
       shopAddress,
       taxId,
+      printerName,
+      silentPrint,
     });
     sfx.playThermalPrint();
-    onShowToast("✅ تم حفظ الإعدادات بنجاح وإرسال أمر الطباعة التجريبي");
-    setTimeout(() => {
-      window.print();
-    }, 400);
+    setTimeout(async () => {
+      const res = await executeReceiptPrint({ allowDialogOnVirtualPrinter: true });
+      onShowToast(res.message);
+    }, 250);
   };
+
+  const defaultPrinterObj = printers.find((p) => p.isDefault);
+  const effectivePrinterName = printerName || defaultPrinterObj?.name || "";
+  const effectiveIsVirtual = isVirtualPdfPrinter(effectivePrinterName);
 
   const isNarrow = paperWidth === "58mm";
 
@@ -55,10 +84,10 @@ export function AdminThermal({
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Title & Description */}
       <div>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: "#FFF", margin: "0 0 4px" }}>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--text)", margin: "0 0 4px" }}>
           إعدادات الطباعة الحرارية (ESC/POS Thermal Receipt)
         </h2>
-        <p style={{ fontSize: 13, color: "#888", margin: 0 }}>
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>
           تخصيص أنماط الإيصالات، مقاسات الورق (80mm / 58mm)، والترويسة التسويقية مع معاينة حية ومباشرة
         </p>
       </div>
@@ -67,8 +96,8 @@ export function AdminThermal({
         {/* Settings Form */}
         <div
           style={{
-            background: "#141414",
-            border: "1px solid #2A2418",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             padding: 20,
             display: "flex",
@@ -80,10 +109,10 @@ export function AdminThermal({
           <div>
             <label className="form-label" style={{ display: "flex", justifyContent: "space-between" }}>
               <span>نمط الطباعة الافتراضي:</span>
-              <span style={{ color: "#F5C242", fontSize: 11, fontWeight: 600 }}>
-                {printMode === "services_only" && "⚡ مقتضب: فاتورة خدمات سريعة"}
-                {printMode === "services_and_catalog" && "⭐ تسويقي: خدمات + عروض مقبلة"}
-                {printMode === "catalog_only" && "📋 منيو: كتالوج أسعار الصالون"}
+              <span style={{ color: "var(--light-gold)", fontSize: 11, fontWeight: 600 }}>
+                {printMode === "services_only" && "مقتضب: فاتورة خدمات سريعة"}
+                {printMode === "services_and_catalog" && "تسويقي: خدمات + عروض مقبلة"}
+                {printMode === "catalog_only" && "منيو: كتالوج أسعار الصالون"}
               </span>
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
@@ -102,8 +131,8 @@ export function AdminThermal({
                       padding: "12px 10px",
                       borderRadius: 8,
                       textAlign: "center",
-                      background: isSelected ? "rgba(212, 175, 55, 0.2)" : "#181818",
-                      border: `2px solid ${isSelected ? "#D4AF37" : "#262015"}`,
+                      background: isSelected ? "rgba(212, 175, 55, 0.2)" : "var(--surface-soft)",
+                      border: `2px solid ${isSelected ? "var(--gold)" : "var(--border)"}`,
                       cursor: "pointer",
                       transition: "all 0.2s ease",
                       boxShadow: isSelected ? "0 0 12px rgba(212, 175, 55, 0.2)" : "none",
@@ -113,12 +142,12 @@ export function AdminThermal({
                       style={{
                         fontSize: 13,
                         fontWeight: 800,
-                        color: isSelected ? "#F5C242" : "#DDD",
+                        color: isSelected ? "var(--light-gold)" : "var(--text)",
                       }}
                     >
                       {m.title}
                     </div>
-                    <div style={{ fontSize: 11, color: isSelected ? "#E0C878" : "#777", marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: isSelected ? "var(--light-gold)" : "var(--muted)", marginTop: 2 }}>
                       {m.desc}
                     </div>
                   </button>
@@ -162,7 +191,7 @@ export function AdminThermal({
                 className="form-input"
                 value={shopAddress}
                 onChange={(e) => setShopAddress(e.target.value)}
-                placeholder="مثال: القاهرة - التجمع الخامس"
+                placeholder="مثال: مساكن الجيش-بجوار بنك ناصر-بجوار سنترال حوده فون"
               />
             </div>
             <div className="form-group">
@@ -189,6 +218,76 @@ export function AdminThermal({
             />
           </div>
 
+          {/* Direct Silent Printer Selection */}
+          <div
+            style={{
+              background: "var(--surface-deep)",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              padding: 14,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <label className="form-label" style={{ margin: 0, color: "var(--light-gold)" }}>
+                طابعة الكاشير المباشرة (بدون نافذة برنت):
+              </label>
+              <button
+                type="button"
+                className="secondary-btn"
+                style={{ height: 28, padding: "0 10px", fontSize: 11.5 }}
+                onClick={() => void loadPrinters()}
+              >
+                تحديث الطابعات
+              </button>
+            </div>
+
+            <select
+              className="form-input"
+              value={printerName}
+              onChange={(e) => setPrinterName(e.target.value)}
+              style={{ fontWeight: 700 }}
+            >
+              <option value="">
+                {defaultPrinterObj
+                  ? `الطابعة الافتراضية للويندوز (${defaultPrinterObj.name})`
+                  : "الطابعة الافتراضية للنظام"}
+              </option>
+              {printers.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.displayName || p.name} {p.isDefault ? "(افتراضية)" : ""}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12.5, color: "var(--text)" }}>
+              <input
+                type="checkbox"
+                checked={silentPrint}
+                onChange={(e) => setSilentPrint(e.target.checked)}
+              />
+              <span>طباعة فورية مباشرة عند الدفع بدون إظهار نافذة الطباعة</span>
+            </label>
+
+            {effectiveIsVirtual && (
+              <div
+                style={{
+                  background: "rgba(255, 174, 66, 0.1)",
+                  border: "1px solid rgba(255, 174, 66, 0.35)",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  fontSize: 11.5,
+                  color: "var(--warning-text)",
+                  lineHeight: 1.5,
+                }}
+              >
+                الطابعة المختارة حالياً ({effectivePrinterName}) طابعة PDF/مستندات افتراضية على الويندوز لذلك تطلب تحديد مكان الحفظ. عند توصيل طابعة الكاشير الحرارية (مثل Xprinter أو Epson) واختيارها من القائمة أعلاه سيتم الطباعة مباشرة بدون نافذة.
+              </div>
+            )}
+          </div>
+
           {/* Test Print Button */}
           <button
             type="button"
@@ -204,8 +303,8 @@ export function AdminThermal({
         {/* Live ESC/POS Receipt Simulator */}
         <div
           style={{
-            background: "#141414",
-            border: "1px solid #2A2418",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             padding: 20,
             display: "flex",
@@ -222,27 +321,27 @@ export function AdminThermal({
               alignItems: "center",
               marginBottom: 14,
               fontSize: 12,
-              color: "#888",
-              background: "#1A1813",
+              color: "var(--muted)",
+              background: "var(--gold-soft)",
               padding: "8px 12px",
               borderRadius: 8,
-              border: "1px solid #332B1C",
+              border: "1px solid var(--border-strong)",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ color: "#D4AF37", fontWeight: 700 }}>النمط:</span>
-              <span style={{ color: "#FFF" }}>
+              <span style={{ color: "var(--gold)", fontWeight: 700 }}>النمط:</span>
+              <span style={{ color: "var(--text)" }}>
                 {printMode === "services_only" && "الخدمات فقط"}
                 {printMode === "services_and_catalog" && "خدمات + كتالوج تسويقي"}
                 {printMode === "catalog_only" && "منيو الكتالوج فقط"}
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ color: "#D4AF37", fontWeight: 700 }}>عرض الرول:</span>
+              <span style={{ color: "var(--gold)", fontWeight: 700 }}>عرض الرول:</span>
               <span
                 style={{
-                  background: isNarrow ? "#E5484D22" : "#3FB95022",
-                  color: isNarrow ? "#FF7B72" : "#56D364",
+                  background: isNarrow ? "var(--danger-soft)" : "var(--success-soft)",
+                  color: isNarrow ? "var(--danger-text)" : "var(--success-text)",
                   padding: "2px 8px",
                   borderRadius: 6,
                   fontFamily: "Inter",
@@ -268,32 +367,13 @@ export function AdminThermal({
             }}
           >
             {/* Header */}
-            <div className="thermal-paper-header" style={{ marginBottom: isNarrow ? 8 : 12 }}>
-              <div
-                className="thermal-paper-logo"
-                style={{
-                  fontSize: isNarrow ? 15 : 18,
-                  fontWeight: 900,
-                  color: "#000",
-                }}
-              >
-                {headerTitle || "صالون لمسة"}
-              </div>
-              <div
-                className="thermal-paper-tagline"
-                style={{ fontSize: isNarrow ? 9.5 : 11, color: "#444", marginTop: 2 }}
-              >
-                أناقتك تبدأ من هنا
-              </div>
-              <div style={{ fontSize: isNarrow ? 9 : 10, color: "#666", marginTop: 4 }}>
-                {shopAddress}
-              </div>
-              <div style={{ fontSize: isNarrow ? 8.5 : 9.5, color: "#777", fontFamily: "Inter" }}>
-                {taxId}
-              </div>
-            </div>
-
-            <hr className="thermal-divider" style={{ margin: isNarrow ? "6px 0" : "10px 0" }} />
+            <ThermalReceiptHeader
+              title={headerTitle || "لمسة خليجي"}
+              address={shopAddress}
+              phone={getSalonSettings().phone}
+              taxId={taxId}
+              isNarrow={isNarrow}
+            />
 
             {/* Content Variant 1 & 2: Standard Invoice Body (services_only OR services_and_catalog) */}
             {printMode !== "catalog_only" && (
@@ -386,7 +466,7 @@ export function AdminThermal({
                     marginBottom: 4,
                   }}
                 >
-                  ✂️ عروض وكتالوج صالون لمسة ✂️
+                  عروض وكتالوج لمسة خليجي
                 </div>
                 <div style={{ fontSize: isNarrow ? 8.5 : 9.5, color: "#666", textAlign: "center", marginBottom: 6 }}>
                   عروض خاصة وحصرية لزيارتك القادمة:
@@ -457,7 +537,7 @@ export function AdminThermal({
                       marginBottom: 4,
                     }}
                   >
-                    💈 خدمات الحلاقة والتدريج
+                    خدمات الحلاقة والتدريج
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: isNarrow ? 9 : 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -490,7 +570,7 @@ export function AdminThermal({
                       marginBottom: 4,
                     }}
                   >
-                    💆 العناية بالبشرة والسبا
+                    العناية بالبشرة والسبا
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: isNarrow ? 9 : 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -519,7 +599,7 @@ export function AdminThermal({
                       marginBottom: 4,
                     }}
                   >
-                    ✨ المعالجات والبروتين
+                    المعالجات والبروتين
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: isNarrow ? 9 : 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -551,14 +631,22 @@ export function AdminThermal({
 
             <hr className="thermal-divider" style={{ margin: isNarrow ? "6px 0" : "10px 0" }} />
 
-            {/* Real Authentic QR Code Generator */}
+            {/* Real Authentic QR Code Generator (Scan to View Invoice & Services Menu) */}
             <div style={{ textAlign: "center", margin: isNarrow ? "8px 0 4px" : "12px 0 6px" }}>
               <QrCode
-                value={`${headerTitle}|${taxId}|INV-2026-1081|190.00|2026-02-11T18:40:00Z`}
-                size={isNarrow ? 68 : 82}
+                value={generateCustomerInvoiceQrUrl({
+                  id: "INV-2026-1081",
+                  total: 190,
+                  customerName: "عميل صالون لمسة",
+                  date: "2026-02-11",
+                  time: "06:40 م",
+                  paymentMethod: "نقداً",
+                  items: [{ id: 1, name: "قص شعر استشوار", price: 190, barber: "حسام حسن", category: "قص الشعر" }],
+                })}
+                size={isNarrow ? 70 : 84}
               />
-              <div style={{ fontSize: isNarrow ? 8 : 8.5, color: "#555", marginTop: 4, fontWeight: 600 }}>
-                فاتورة إلكترونية معتمدة • مصلحة الضرائب المصرية
+              <div style={{ fontSize: isNarrow ? 8 : 8.5, color: "#222", marginTop: 4, fontWeight: 700 }}>
+                امسح الكود بكاميرا الموبايل لعرض الفاتورة وكتالوج الخدمات
               </div>
             </div>
 

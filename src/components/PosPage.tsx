@@ -1,16 +1,37 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { ServiceItem, Barber, CartItem, HeldOrder, ServiceCategory, AdvanceRecord } from "../types";
+import {
+  ServiceItem,
+  Barber,
+  CartItem,
+  HeldOrder,
+  ServiceCategory,
+  AdvanceRecord,
+  CashOutCategory,
+  CashOutPayload,
+} from "../types";
 import { Icon } from "./Icons";
 import { sfx } from "../utils/audio";
+import { executeReceiptPrint } from "../utils/printHelper";
+import { getThermalSettings } from "../utils/thermalSettings";
 
 export function PosPage({
   services,
   barbers,
   onCheckout,
   activeCashier,
-  shiftNumber = 104,
+  shiftNumber: _shiftNumber = 104,
   onOpenQueue,
   onAddAdvance,
+  onCashOut,
+  drawerCash = 0,
+  heldOrders: propHeldOrders,
+  onHeldOrdersChange,
+  openPendingSignal = 0,
+  openAdvanceSignal = 0,
+  openCashOutSignal = 0,
+  clearCartSignal = 0,
+  isIsolated = false,
+  onToggleIsolated,
 }: {
   services: ServiceItem[];
   barbers: Barber[];
@@ -19,33 +40,29 @@ export function PosPage({
   shiftNumber?: number;
   onOpenQueue?: () => void;
   onAddAdvance?: (advance: AdvanceRecord) => void;
+  onCashOut?: (payload: CashOutPayload) => Promise<{ ok: boolean; message?: string }>;
+  drawerCash?: number;
+  heldOrders?: HeldOrder[];
+  onHeldOrdersChange?: (next: HeldOrder[]) => void;
+  openPendingSignal?: number;
+  openAdvanceSignal?: number;
+  openCashOutSignal?: number;
+  clearCartSignal?: number;
+  isIsolated?: boolean;
+  onToggleIsolated?: () => void;
 }) {
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory>("الكل");
   const [searchQuery, setSearchQuery] = useState("");
-  const [cart, setCart] = useState<CartItem[]>([
-    {
-      serviceId: 2,
-      name: "تدريج استايل VIP (Skin Fade)",
-      category: "قص الشعر",
-      price: 130,
-      duration: 40,
-      qty: 1,
-      barberId: "b1",
-      barberName: "محمود إبراهيم",
-    },
-    {
-      serviceId: 3,
-      name: "تهذيب وتحديد ذقن بالموس",
-      category: "الذقن",
-      price: 60,
-      duration: 25,
-      qty: 1,
-      barberId: "b1",
-      barberName: "محمود إبراهيم",
-    },
-  ]);
+  const [cart, setCart] = useState<CartItem[]>([]);
 
-  const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([
+  // Clear cart whenever payment succeeds
+  useEffect(() => {
+    if (clearCartSignal) {
+      setCart([]);
+    }
+  }, [clearCartSignal]);
+
+  const [localHeldOrders, setLocalHeldOrders] = useState<HeldOrder[]>([
     {
       id: "HOLD-01",
       holdTime: "05:12 م",
@@ -65,6 +82,11 @@ export function PosPage({
       ],
     },
   ]);
+  const heldOrders = propHeldOrders ?? localHeldOrders;
+  const setHeldOrders = (next: HeldOrder[]) => {
+    if (onHeldOrdersChange) onHeldOrdersChange(next);
+    else setLocalHeldOrders(next);
+  };
 
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -72,50 +94,145 @@ export function PosPage({
   const [holdNote, setHoldNote] = useState("");
   const [notification, setNotification] = useState("");
 
-  // Cashier Advance Modal State
-  const [showAdvanceModal, setShowAdvanceModal] = useState(false);
-  const [advanceEmpId, setAdvanceEmpId] = useState(barbers[0]?.id || "");
-  const [advanceAmount, setAdvanceAmount] = useState("");
-  const [advanceReason, setAdvanceReason] = useState("");
-  const [advanceNotes, setAdvanceNotes] = useState("");
+  // Cash Out Modal State (خروج نقدية من الدرج)
+  const [showCashOutModal, setShowCashOutModal] = useState(false);
+  const [cashOutCategory, setCashOutCategory] = useState<CashOutCategory>("سلفة موظف");
+  const [cashOutBarberId, setCashOutBarberId] = useState(barbers[0]?.id || "");
+  const [cashOutRecipient, setCashOutRecipient] = useState(barbers[0]?.name || "");
+  const [cashOutAmount, setCashOutAmount] = useState("");
+  const [cashOutReason, setCashOutReason] = useState("");
+  const [cashOutNotes, setCashOutNotes] = useState("");
+  const [cashOutShouldPrint, setCashOutShouldPrint] = useState(true);
+  const [isSubmittingCashOut, setIsSubmittingCashOut] = useState(false);
+  const [cashOutSlipData, setCashOutSlipData] = useState<{
+    voucherId: string;
+    amount: number;
+    category: CashOutCategory;
+    recipient: string;
+    reason: string;
+    notes?: string;
+    date: string;
+    time: string;
+    cashier: string;
+    shiftNumber: number;
+  } | null>(null);
 
-  const handleSaveAdvanceFromCashier = () => {
-    if (!advanceEmpId || !advanceAmount || !advanceReason.trim()) {
-      showToast("⚠️ يرجى تحديد الموظف والمبلغ وسبب السلفة");
-      return;
+  const thermalSettings = getThermalSettings();
+
+  const lastPendingSignalRef = useRef(openPendingSignal);
+  useEffect(() => {
+    if (openPendingSignal > lastPendingSignalRef.current) {
+      setShowPendingModal(true);
     }
-    const targetBarber = barbers.find((b) => b.id === advanceEmpId);
-    if (!targetBarber) return;
+    lastPendingSignalRef.current = openPendingSignal;
+  }, [openPendingSignal]);
 
-    const numAmount = Number(advanceAmount);
+  const lastAdvanceSignalRef = useRef(openAdvanceSignal);
+  useEffect(() => {
+    if (openAdvanceSignal > lastAdvanceSignalRef.current) {
+      setCashOutCategory("سلفة موظف");
+      setCashOutBarberId(barbers[0]?.id || "");
+      setCashOutRecipient(barbers[0]?.name || "");
+      setCashOutAmount("");
+      setCashOutReason("");
+      setCashOutNotes("");
+      setShowCashOutModal(true);
+    }
+    lastAdvanceSignalRef.current = openAdvanceSignal;
+  }, [openAdvanceSignal, barbers]);
+
+  const lastCashOutSignalRef = useRef(openCashOutSignal);
+  useEffect(() => {
+    if (openCashOutSignal > lastCashOutSignalRef.current) {
+      setShowCashOutModal(true);
+    }
+    lastCashOutSignalRef.current = openCashOutSignal;
+  }, [openCashOutSignal]);
+
+  const handleConfirmCashOut = async () => {
+    const numAmount = Number(cashOutAmount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      showToast("⚠️ الرجاء إدخال مبلغ صحيح للسلفة");
+      showToast("الرجاء إدخال مبلغ صحيح للصرف");
       return;
     }
+
+    if (!cashOutReason.trim()) {
+      showToast("الرجاء كتابة سبب وخروج النقدية بالتفصيل");
+      return;
+    }
+
+    const finalRecipient =
+      cashOutCategory === "سلفة موظف"
+        ? (barbers.find((b) => b.id === cashOutBarberId)?.name || cashOutRecipient || "موظف")
+        : (cashOutRecipient.trim() || "غير محدد");
 
     const now = new Date();
     const dateStr = now.toLocaleDateString("ar-EG", { day: "2-digit", month: "2-digit", year: "numeric" });
     const timeStr = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+    const voucherId = `VCH-OUT-${Date.now().toString().slice(-6)}`;
 
-    const newAdvance: AdvanceRecord = {
-      id: `ADV-${Date.now()}`,
-      barberId: targetBarber.id,
-      barberName: targetBarber.name,
+    const slip = {
+      voucherId,
       amount: numAmount,
-      reason: advanceReason.trim(),
+      category: cashOutCategory,
+      recipient: finalRecipient,
+      reason: cashOutReason.trim(),
+      notes: cashOutNotes.trim(),
       date: dateStr,
       time: timeStr,
-      registeredBy: activeCashier,
-      registeredByRole: "cashier",
-      status: "نشط",
-      notes: advanceNotes.trim() ? `كاشير: ${advanceNotes.trim()}` : "سلفة مسجلة من طرفية الكاشير",
+      cashier: activeCashier,
+      shiftNumber: _shiftNumber,
     };
+    setCashOutSlipData(slip);
+    setIsSubmittingCashOut(true);
 
-    if (onAddAdvance) {
-      onAddAdvance(newAdvance);
+    try {
+      if (onCashOut) {
+        await onCashOut({
+          amount: numAmount,
+          category: cashOutCategory,
+          recipient: finalRecipient,
+          reason: cashOutReason.trim(),
+          notes: cashOutNotes.trim(),
+          barberId: cashOutCategory === "سلفة موظف" ? cashOutBarberId : undefined,
+          shouldPrint: cashOutShouldPrint,
+        });
+      } else if (cashOutCategory === "سلفة موظف" && onAddAdvance) {
+        onAddAdvance({
+          id: `ADV-${Date.now()}`,
+          barberId: cashOutBarberId,
+          barberName: finalRecipient,
+          amount: numAmount,
+          reason: cashOutReason.trim(),
+          date: dateStr,
+          time: timeStr,
+          registeredBy: activeCashier,
+          registeredByRole: "cashier",
+          status: "نشط",
+          notes: cashOutNotes.trim() ? `كاشير: ${cashOutNotes.trim()}` : "سلفة مسجلة من طرفية الكاشير",
+        });
+      }
+
+      sfx.playCashRegister();
+      showToast(`تم بنجاح صرف ${numAmount.toLocaleString("ar-EG")} ج.م من الدرج (${cashOutCategory})`);
+
+      if (cashOutShouldPrint) {
+        setTimeout(async () => {
+          const res = await executeReceiptPrint({ allowDialogOnVirtualPrinter: true });
+          showToast(res.message);
+        }, 150);
+      }
+
+      setShowCashOutModal(false);
+      setCashOutAmount("");
+      setCashOutReason("");
+      setCashOutNotes("");
+    } catch (err) {
+      console.error(err);
+      showToast("حدث خطأ أثناء تسجيل خروج النقدية");
+    } finally {
+      setIsSubmittingCashOut(false);
     }
-    setShowAdvanceModal(false);
-    showToast(`✅ تم تسجيل سلفة بقيمة ${numAmount} ج.م للموظف «${targetBarber.name}»`);
   };
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -172,11 +289,6 @@ export function PosPage({
         if (cart.length > 0) {
           setShowClearConfirm(true);
         }
-      } else if (e.key === "F6") {
-        e.preventDefault();
-        if (onOpenQueue) {
-          onOpenQueue();
-        }
       } else if (e.key === "Escape") {
         setShowPendingModal(false);
         setShowClearConfirm(false);
@@ -227,31 +339,27 @@ export function PosPage({
     return available || presentBarbers[0] || barbers[0];
   }, [presentBarbers, barbers]);
 
-  // Add Service to Cart
+  // Add Service to Cart (Once per service - barbershop has no duplicate quantities)
   const handleAddService = (srv: ServiceItem) => {
+    const isAlreadyInCart = cart.some((item) => item.serviceId === srv.id);
+    if (isAlreadyInCart) {
+      showToast(`«${srv.name}» مضافة بالفعل في السلة`);
+      return;
+    }
     sfx.playClick();
-    setCart((prev) => {
-      const existingIndex = prev.findIndex((item) => item.serviceId === srv.id);
-      if (existingIndex > -1) {
-        const next = [...prev];
-        next[existingIndex].qty += 1;
-        return next;
-      }
-      return [
-        ...prev,
-        {
-          serviceId: srv.id,
-          name: srv.name,
-          category: srv.category,
-          price: srv.price,
-          duration: srv.duration,
-          qty: 1,
-          barberId: defaultBarber.id,
-          barberName: defaultBarber.name,
-        },
-      ];
-    });
-    showToast(`تمت إضافة «${srv.name}» إلى سلة الطلب`);
+    setCart((prev) => [
+      ...prev,
+      {
+        serviceId: srv.id,
+        name: srv.name,
+        category: srv.category,
+        price: srv.price,
+        duration: srv.duration,
+        qty: 1,
+        barberId: defaultBarber.id,
+        barberName: defaultBarber.name,
+      },
+    ]);
   };
 
   // Adjust Qty
@@ -336,172 +444,198 @@ export function PosPage({
     showToast(`تم حذف الطلب المعلق (${heldId})`);
   };
 
+  // Fullscreen / POS Focus Mode Toggle
+  const handleToggleFocusMode = () => {
+    onToggleIsolated?.();
+    try {
+      if (!isIsolated) {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } else {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F11") {
+        e.preventDefault();
+        handleToggleFocusMode();
+      } else if (e.key === "F6") {
+        e.preventDefault();
+        onOpenQueue?.();
+      } else if (e.key === "F7") {
+        e.preventDefault();
+        setShowCashOutModal(true);
+      } else if (e.key === "Escape" && isIsolated) {
+        e.preventDefault();
+        onToggleIsolated?.();
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isIsolated]);
+
   return (
     <div>
-      {/* Top Header / Cashier Operational Status */}
+      {/* Top Header Bar: Actions + Cash Out + Drawer Balance + Clock */}
       <div
         style={{
-          background: "#121212",
-          border: "1px solid #2A2418",
-          borderRadius: 14,
-          padding: "14px 20px",
-          marginBottom: 20,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          boxShadow: "0 4px 18px rgba(0,0,0,0.3)",
+          gap: 10,
+          padding: "6px 14px",
+          background: isIsolated ? "rgba(212,175,55,0.08)" : "var(--surface-soft)",
+          border: isIsolated ? "1px solid var(--border-gold)" : "1px solid var(--border-subtle)",
+          borderRadius: 10,
+          marginBottom: 12,
+          whiteSpace: "nowrap",
+          flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 9,
-                background: "#1E1A12",
-                border: "1px solid #D4AF37",
-                color: "#D4AF37",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Icon name="users" size={18} />
-            </span>
-            <div>
-              <div style={{ fontSize: 11, color: "#888", fontWeight: 600 }}>الكاشير المناوب</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#FFF" }}>{activeCashier}</div>
-            </div>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={handleToggleFocusMode}
+            title={isIsolated ? "الخروج من وضع الشاشة الكاملة المعزولة (Esc أو F11)" : "تكبير الشاشة وعزل شاشة الكاشير عن القائمة (F11)"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              padding: "5px 12px",
+              borderRadius: 8,
+              border: isIsolated ? "1px solid var(--gold)" : "1px solid var(--border)",
+              background: isIsolated ? "var(--gold-soft)" : "var(--surface-2)",
+              color: isIsolated ? "var(--light-gold)" : "var(--text)",
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: "pointer",
+              transition: "all 0.18s ease",
+            }}
+          >
+            <Icon name={isIsolated ? "minimize" : "maximize"} size={13} />
+            <span>{isIsolated ? "إلغاء العزل (Esc)" : "عزل الكاشير (F11)"}</span>
+          </button>
 
-          <div style={{ width: 1, height: 28, background: "#252016" }} />
-
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span
+          {/* F6 Queue Screen Modal Button */}
+          {onOpenQueue && (
+            <button
+              type="button"
+              onClick={onOpenQueue}
+              title="فتح شاشة نداء الدور وصالة الانتظار للعملاء (اضغط F6)"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
-                background: "rgba(63, 185, 80, 0.12)",
-                color: "#56D364",
-                border: "1px solid rgba(63, 185, 80, 0.3)",
-                padding: "4px 10px",
+                padding: "5px 12px",
                 borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 700,
+                border: "1px solid var(--border-gold)",
+                background: "var(--gold-soft)",
+                color: "var(--light-gold)",
+                fontSize: 12.5,
+                fontWeight: 800,
+                cursor: "pointer",
+                transition: "all 0.18s ease",
               }}
             >
-              <i style={{ width: 6, height: 6, borderRadius: "50%", background: "#3FB950" }} />
-              الوردية #{shiftNumber} (نشطة)
-            </span>
-            <span style={{ fontSize: 12, color: "#888" }}>منذ 09:00 ص</span>
-          </div>
-
-          <div style={{ width: 1, height: 28, background: "#252016" }} />
-
-          <button
-            type="button"
-            className="pending-orders-pill"
-            onClick={() => setShowPendingModal(true)}
-            title="الطلبات المعلقة (F4)"
-          >
-            <Icon name="pause" size={15} />
-            <span>الطلبات المعلقة:</span>
-            <strong style={{ fontFamily: "Inter", fontSize: 14 }}>{heldOrders.length}</strong>
-            <kbd>F4</kbd>
-          </button>
-
-          {onOpenQueue && (
-            <button
-              type="button"
-              className="pending-orders-pill"
-              onClick={onOpenQueue}
-              title="عرض شاشة الدور وصالة الانتظار (F6)"
-              style={{
-                borderColor: "rgba(212, 175, 55, 0.4)",
-                color: "#F5C242",
-              }}
-            >
-              <Icon name="users" size={15} />
+              <span
+                style={{
+                  background: "var(--card)",
+                  padding: "1px 6px",
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontFamily: "Inter",
+                  border: "1px solid var(--border)",
+                  color: "var(--gold)",
+                  fontWeight: 900,
+                }}
+              >
+                F6
+              </span>
+              <Icon name="users" size={14} />
               <span>شاشة الدور</span>
-              <kbd>F6</kbd>
             </button>
           )}
 
+          {/* Dedicated Cash Out Button Requested by User */}
           <button
             type="button"
-            className="pending-orders-pill"
             onClick={() => {
-              setAdvanceEmpId(barbers[0]?.id || "");
-              setAdvanceAmount("");
-              setAdvanceReason("");
-              setAdvanceNotes("");
-              setShowAdvanceModal(true);
+              setCashOutCategory("سلفة موظف");
+              setCashOutBarberId(barbers[0]?.id || "");
+              setCashOutRecipient(barbers[0]?.name || "");
+              setCashOutAmount("");
+              setCashOutReason("");
+              setCashOutNotes("");
+              setShowCashOutModal(true);
             }}
-            title="تسجيل سلفة موظف جديدة"
+            title="خروج وصرف نقدية من الدرج (سلفة، مصاريف ونثريات، مسحوبات) - اضغط F7"
             style={{
-              borderColor: "rgba(245, 194, 66, 0.5)",
-              color: "#F5C242",
-              background: "rgba(245, 194, 66, 0.08)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "5px 14px",
+              borderRadius: 8,
+              border: "1px solid rgba(229, 72, 77, 0.45)",
+              background: "rgba(229, 72, 77, 0.12)",
+              color: "var(--danger-text)",
+              fontSize: 12.5,
+              fontWeight: 800,
+              cursor: "pointer",
+              transition: "all 0.18s ease",
             }}
           >
-            <Icon name="dollarSign" size={15} />
-            <span>سلفة موظف</span>
+            <Icon name="dollarSign" size={14} />
+            <span>خروج نقدية من الدرج (F7)</span>
           </button>
-        </div>
 
-        {/* Live Date and Time */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 12, color: "#9E9E9E", fontWeight: 600 }}>{currentDate}</div>
+          {/* Current Drawer Balance Indicator */}
+          {drawerCash !== undefined && (
             <div
               style={{
-                fontSize: 16,
-                fontWeight: 800,
-                color: "#F5C242",
-                fontFamily: "Inter, Cairo",
-                direction: "ltr",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 10px",
+                borderRadius: 8,
+                background: "var(--gold-soft)",
+                border: "1px solid var(--border-gold)",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "var(--light-gold)",
               }}
+              title="رصيد الكاش المتواجد حالياً داخل درج الكاشير"
             >
-              {currentTime}
+              <span>درج الكاشير:</span>
+              <strong style={{ fontFamily: "Inter, Cairo" }}>{drawerCash.toLocaleString("ar-EG")} ج.م</strong>
             </div>
-          </div>
+          )}
+        </div>
 
-          {/* Quick Shortcuts Cheat Pill */}
-          <div
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon name="clock" size={13} style={{ color: "var(--gold)" }} />
+          <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{currentDate}</span>
+          <span style={{ color: "var(--border-strong)" }}>•</span>
+          <span
             style={{
-              background: "#181818",
-              border: "1px solid #2B2519",
-              padding: "6px 12px",
-              borderRadius: 8,
-              fontSize: 12,
-              color: "#BBB",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
+              fontSize: 14,
+              fontWeight: 800,
+              color: "var(--light-gold)",
+              fontFamily: "Inter, Cairo",
+              fontVariantNumeric: "tabular-nums",
+              direction: "ltr",
             }}
           >
-            <span>
-              <kbd>F1</kbd> بحث
-            </span>
-            <span>•</span>
-            <span>
-              <kbd>F2</kbd> تأكيد
-            </span>
-            <span>•</span>
-            <span>
-              <kbd>F3</kbd> تعليق
-            </span>
-            <span>•</span>
-            <span>
-              <kbd>F4</kbd> معلقة
-            </span>
-            <span>•</span>
-            <span>
-              <kbd>F6</kbd> الدور
-            </span>
-          </div>
+            {currentTime}
+          </span>
         </div>
       </div>
 
@@ -547,7 +681,7 @@ export function PosPage({
                   transform: "translateY(-50%)",
                   background: "transparent",
                   border: 0,
-                  color: "#888",
+                  color: "var(--muted)",
                   cursor: "pointer",
                 }}
               >
@@ -558,53 +692,77 @@ export function PosPage({
 
           {/* Services Grid */}
           <div className="services-grid">
-            {filteredServices.map((srv) => (
-              <div
-                key={srv.id}
-                className="service-card"
-                onClick={() => handleAddService(srv)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    handleAddService(srv);
+            {filteredServices.map((srv) => {
+              const isSelected = cart.some((c) => c.serviceId === srv.id);
+              return (
+                <div
+                  key={srv.id}
+                  className="service-card"
+                  onClick={() => handleAddService(srv)}
+                  role="button"
+                  tabIndex={0}
+                  style={
+                    isSelected
+                      ? {
+                          borderColor: "var(--gold)",
+                          background: "var(--gold-soft)",
+                          boxShadow: "0 0 10px rgba(212, 175, 55, 0.2)",
+                        }
+                      : undefined
                   }
-                }}
-              >
-                <div>
-                  <div className="service-card-top">
-                    <span className="service-badge-cat">{srv.category}</span>
-                    <span className="service-duration">
-                      <Icon name="clock" size={12} />
-                      <span>{srv.duration} د</span>
-                    </span>
-                  </div>
-                  <div className="service-card-title">{srv.name}</div>
-                  {srv.description && (
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "#888",
-                        marginBottom: 10,
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {srv.description}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      handleAddService(srv);
+                    }
+                  }}
+                >
+                  <div>
+                    <div className="service-card-top">
+                      <span className="service-badge-cat">{srv.category}</span>
+                      <span className="service-duration">
+                        <Icon name="clock" size={12} />
+                        <span>{srv.duration} د</span>
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <div className="service-card-title">{srv.name}</div>
+                    {srv.description && (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "var(--muted)",
+                          marginBottom: 10,
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {srv.description}
+                      </div>
+                    )}
+                  </div>
 
-                <div className="service-card-bottom">
-                  <div className="service-price">
-                    {srv.price}
-                    <small>ج.م</small>
-                  </div>
-                  <div className="service-add-icon">
-                    <Icon name="plus" size={16} />
+                  <div className="service-card-bottom">
+                    <div className="service-price">
+                      {srv.price}
+                      <small>ج.م</small>
+                    </div>
+                    <div
+                      className="service-add-icon"
+                      style={
+                        isSelected
+                          ? {
+                              background: "var(--success-soft)",
+                              borderColor: "var(--success-border)",
+                              color: "var(--success-text)",
+                            }
+                          : undefined
+                      }
+                      title={isSelected ? "الخدمة مضافة في السلة" : "إضافة إلى السلة"}
+                    >
+                      <Icon name={isSelected ? "check" : "plus"} size={16} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {filteredServices.length === 0 && (
               <div
@@ -612,14 +770,14 @@ export function PosPage({
                   gridColumn: "1 / -1",
                   padding: "50px 20px",
                   textAlign: "center",
-                  background: "#141414",
+                  background: "var(--card)",
                   borderRadius: 14,
-                  border: "1px dashed #2A2418",
-                  color: "#888",
+                  border: "1px dashed var(--border-strong)",
+                  color: "var(--muted)",
                 }}
               >
-                <Icon name="scissors" size={36} style={{ color: "#444", marginBottom: 10 } as React.CSSProperties} />
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#CCC" }}>
+                <Icon name="scissors" size={36} style={{ color: "var(--subtle)", marginBottom: 10 } as React.CSSProperties} />
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-secondary)" }}>
                   لا توجد خدمات مطابقة للبحث
                 </div>
                 <div style={{ fontSize: 13, marginTop: 4 }}>
@@ -635,7 +793,7 @@ export function PosPage({
           <div className="cart-header">
             <div>
               <h2>سلة الطلب الحالي</h2>
-              <div style={{ fontSize: 12, color: "#8E8E8E", marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                 {cart.length > 0 ? `${cart.length} خدمات مختارة • تقدير ${totalDuration} دقيقة` : "السلة فارغة"}
               </div>
             </div>
@@ -656,9 +814,9 @@ export function PosPage({
           <div className="cart-items-list">
             {cart.length === 0 ? (
               <div className="cart-empty">
-                <Icon name="receipt" size={42} style={{ color: "#333", marginBottom: 12 } as React.CSSProperties} />
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#999" }}>لم يتم اختيار خدمات بعد</div>
-                <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
+                <Icon name="receipt" size={42} style={{ color: "var(--subtle)", marginBottom: 12 } as React.CSSProperties} />
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--muted)" }}>لم يتم اختيار خدمات بعد</div>
+                <div style={{ fontSize: 13, color: "var(--subtle)", marginTop: 4 }}>
                   انقر على أي بطاقة خدمة من القائمة لإضافتها إلى الفاتورة
                 </div>
               </div>
@@ -672,12 +830,13 @@ export function PosPage({
                     <div className="cart-item-header">
                       <div>
                         <div className="cart-item-name">{item.name}</div>
-                        <div style={{ fontSize: 12, color: "#888" }}>
-                          {item.duration} دقيقة لكل حبة
+                        <div style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 3 }}>
+                          <Icon name="clock" size={11} />
+                          <span>{item.duration} دقيقة</span>
                         </div>
                       </div>
                       <div className="cart-item-price">
-                        {item.price * item.qty}
+                        {item.price}
                         <small style={{ fontSize: 11, marginRight: 2 }}>ج.م</small>
                       </div>
                     </div>
@@ -688,7 +847,7 @@ export function PosPage({
                         style={{
                           fontSize: 11,
                           fontWeight: 700,
-                          color: "#9E9E9E",
+                          color: "var(--muted)",
                           marginBottom: 4,
                           display: "flex",
                           alignItems: "center",
@@ -704,10 +863,10 @@ export function PosPage({
                             gap: 4,
                             color:
                               barberStatus === "متاح"
-                                ? "#3FB950"
+                                ? "var(--success-text)"
                                 : barberStatus === "مشغول"
-                                  ? "#FF9F1C"
-                                  : "#888",
+                                  ? "var(--warning-text)"
+                                  : "var(--muted)",
                           }}
                         >
                           <i
@@ -717,10 +876,10 @@ export function PosPage({
                               borderRadius: "50%",
                               background:
                                 barberStatus === "متاح"
-                                  ? "#3FB950"
+                                  ? "var(--success-text)"
                                   : barberStatus === "مشغول"
-                                    ? "#FF9F1C"
-                                    : "#888",
+                                    ? "var(--warning-text)"
+                                    : "var(--muted)",
                             }}
                           />
                           {barberStatus}
@@ -744,41 +903,25 @@ export function PosPage({
                       </div>
                     </div>
 
-                    {/* Quantity Controls & Remove */}
-                    <div className="cart-item-bottom">
-                      <div className="qty-controls">
-                        <button
-                          type="button"
-                          className="qty-btn"
-                          onClick={() => handleQtyChange(item.serviceId, -1)}
-                          title="إنقاص الكمية"
-                        >
-                          <Icon name="minus" size={13} />
-                        </button>
-                        <span className="qty-number">{item.qty}</span>
-                        <button
-                          type="button"
-                          className="qty-btn"
-                          onClick={() => handleQtyChange(item.serviceId, 1)}
-                          title="زيادة الكمية"
-                        >
-                          <Icon name="plus" size={13} />
-                        </button>
-                      </div>
-
+                    {/* Remove Item Button */}
+                    <div className="cart-item-bottom" style={{ display: "flex", justifyContent: "flex-end" }}>
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(item.serviceId)}
                         style={{
-                          background: "transparent",
-                          border: 0,
-                          color: "#FF8E92",
+                          background: "var(--danger-soft)",
+                          border: "1px solid var(--danger-border)",
+                          color: "var(--danger-text)",
                           fontSize: 12,
+                          fontWeight: 700,
                           cursor: "pointer",
-                          display: "flex",
+                          display: "inline-flex",
                           alignItems: "center",
-                          gap: 4,
+                          gap: 5,
+                          padding: "5px 12px",
+                          borderRadius: 8,
                         }}
+                        title="حذف هذه الخدمة من السلة"
                       >
                         <Icon name="trash" size={13} />
                         <span>حذف</span>
@@ -800,7 +943,7 @@ export function PosPage({
             </div>
             <div className="totals-row">
               <span>الضريبة المضافة (شاملة):</span>
-              <span style={{ fontSize: 12, color: "#888" }}>مشمولة في الأسعار</span>
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>مشمولة في الأسعار</span>
             </div>
             <div className="totals-row grand-total-row">
               <span style={{ fontSize: 16, fontWeight: 800 }}>الإجمالي النهائي:</span>
@@ -843,7 +986,7 @@ export function PosPage({
                 className="secondary-btn"
                 onClick={() => setShowClearConfirm(true)}
                 disabled={cart.length === 0}
-                style={{ color: "#FF9999", borderColor: "#3D1E1E" }}
+                style={{ color: "var(--danger-text)", borderColor: "var(--danger-border)" }}
               >
                 <Icon name="trash" size={15} />
                 <span>إلغاء السلة</span>
@@ -863,13 +1006,13 @@ export function PosPage({
               <button
                 type="button"
                 onClick={() => setShowHoldModal(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
             </div>
             <div className="modal-body">
-              <p style={{ fontSize: 14, color: "#CCC", marginBottom: 14 }}>
+              <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 14 }}>
                 سيتم حفظ الخدمات الحالية في قائمة الطلبات المعلقة ويمكن استعادتها في أي وقت.
               </p>
               <div className="form-group">
@@ -885,15 +1028,15 @@ export function PosPage({
               </div>
               <div
                 style={{
-                  background: "#161616",
+                  background: "var(--surface-2)",
                   padding: 12,
                   borderRadius: 10,
-                  border: "1px solid #2B2519",
+                  border: "1px solid var(--border)",
                   fontSize: 13,
-                  color: "#BBB",
+                  color: "var(--text-secondary)",
                 }}
               >
-                <div>إجمالي المبلغ المعلق: <strong style={{ color: "#F5C242" }}>{subtotal} ج.م</strong></div>
+                <div>إجمالي المبلغ المعلق: <strong style={{ color: "var(--light-gold)" }}>{subtotal} ج.م</strong></div>
                 <div>عدد الخدمات: <strong>{cart.length}</strong></div>
               </div>
             </div>
@@ -922,17 +1065,17 @@ export function PosPage({
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 440 }}>
             <div className="modal-head">
-              <h2 style={{ color: "#FF8E92" }}>تأكيد إلغاء ومسح السلة</h2>
+              <h2 style={{ color: "var(--danger-text)" }}>تأكيد إلغاء ومسح السلة</h2>
               <button
                 type="button"
                 onClick={() => setShowClearConfirm(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
             </div>
             <div className="modal-body">
-              <p style={{ fontSize: 15, color: "#EEE", lineHeight: 1.5 }}>
+              <p style={{ fontSize: 15, color: "var(--text)", lineHeight: 1.5 }}>
                 هل أنت متأكد من رغبتك في إفراغ سلة الطلب الحالية بالكامل؟ لن يمكن التراجع عن هذا الإجراء.
               </p>
             </div>
@@ -972,16 +1115,16 @@ export function PosPage({
               <button
                 type="button"
                 onClick={() => setShowPendingModal(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
             </div>
             <div className="modal-body">
               {heldOrders.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 20px", color: "#888" }}>
-                  <Icon name="pause" size={40} style={{ color: "#444", marginBottom: 10 } as React.CSSProperties} />
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "#BBB" }}>لا توجد طلبات معلقة حالياً</div>
+                <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)" }}>
+                  <Icon name="pause" size={40} style={{ color: "var(--subtle)", marginBottom: 10 } as React.CSSProperties} />
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-secondary)" }}>لا توجد طلبات معلقة حالياً</div>
                   <div style={{ fontSize: 13, marginTop: 4 }}>يمكنك تعليق أي طلب بالضغط على زر F3</div>
                 </div>
               ) : (
@@ -990,8 +1133,8 @@ export function PosPage({
                     <div
                       key={held.id}
                       style={{
-                        background: "#161616",
-                        border: "1px solid #2B2519",
+                        background: "var(--surface-2)",
+                        border: "1px solid var(--border)",
                         borderRadius: 12,
                         padding: 16,
                         display: "flex",
@@ -1004,7 +1147,7 @@ export function PosPage({
                           <span
                             style={{
                               background: "rgba(255, 159, 28, 0.15)",
-                              color: "#FF9F1C",
+                              color: "var(--warning-text)",
                               border: "1px solid rgba(255, 159, 28, 0.3)",
                               padding: "2px 8px",
                               borderRadius: 6,
@@ -1015,22 +1158,22 @@ export function PosPage({
                           >
                             {held.id}
                           </span>
-                          <span style={{ fontSize: 13, color: "#888" }}>
-                            وقت التعليق: <strong style={{ color: "#DDD" }}>{held.holdTime}</strong>
+                          <span style={{ fontSize: 13, color: "var(--muted)" }}>
+                            وقت التعليق: <strong style={{ color: "var(--text)" }}>{held.holdTime}</strong>
                           </span>
                         </div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "#FFF", marginTop: 6 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginTop: 6 }}>
                           {held.customerNote}
                         </div>
-                        <div style={{ fontSize: 13, color: "#AAA", marginTop: 4 }}>
-                          {held.items.map((i) => `${i.name} (×${i.qty})`).join("، ")}
+                        <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 4 }}>
+                          {held.items.map((i) => i.name).join("، ")}
                         </div>
                       </div>
 
                       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                         <div style={{ textAlign: "left" }}>
-                          <div style={{ fontSize: 11, color: "#888" }}>المبلغ</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, color: "#F5C242", fontFamily: "Inter" }}>
+                          <div style={{ fontSize: 11, color: "var(--muted)" }}>المبلغ</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: "var(--light-gold)", fontFamily: "Inter" }}>
                             {held.subtotal} <small style={{ fontSize: 12, fontFamily: "Cairo" }}>ج.م</small>
                           </div>
                         </div>
@@ -1073,8 +1216,8 @@ export function PosPage({
         </div>
       )}
 
-      {/* Cashier Add Employee Advance Modal */}
-      {showAdvanceModal && (
+      {/* Cash Out Modal (خروج نقدية من الدرج - سلفة / مصاريف / مسحوبات) */}
+      {showCashOutModal && (
         <div
           style={{
             position: "fixed",
@@ -1086,50 +1229,57 @@ export function PosPage({
             alignItems: "center",
             justifyContent: "center",
             padding: 16,
+            overflowY: "auto",
           }}
         >
           <div
             style={{
-              background: "#161616",
-              border: "1.5px solid #D4AF37",
+              background: "var(--surface-2)",
+              border: "1.5px solid var(--gold)",
               borderRadius: 18,
-              padding: 28,
+              padding: "24px 26px",
               width: "100%",
-              maxWidth: 480,
+              maxWidth: 530,
               boxShadow: "0 25px 70px rgba(0,0,0,0.8), 0 0 30px rgba(212,175,55,0.15)",
+              maxHeight: "92vh",
+              overflowY: "auto",
             }}
           >
+            {/* Modal Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span
                   style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 10,
-                    background: "rgba(212, 175, 55, 0.15)",
-                    border: "1px solid #D4AF37",
-                    color: "#F5C242",
+                    width: 42,
+                    height: 42,
+                    borderRadius: 12,
+                    background: "rgba(229, 72, 77, 0.15)",
+                    border: "1px solid rgba(229, 72, 77, 0.4)",
+                    color: "var(--danger-text)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Icon name="dollarSign" size={20} />
+                  <Icon name="dollarSign" size={22} />
                 </span>
                 <div>
-                  <h3 style={{ margin: 0, color: "#FFF", fontSize: 18, fontWeight: 800 }}>
-                    تسجيل سلفة موظف جديدة
+                  <h3 style={{ margin: 0, color: "var(--text)", fontSize: 18, fontWeight: 800 }}>
+                    خروج نقدية من الدرج (Cash Out)
                   </h3>
-                  <span style={{ fontSize: 12, color: "#888" }}>الطرفية الحالية: {activeCashier}</span>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                    الطرفية: <strong>{activeCashier}</strong> • الوردية رقم #{_shiftNumber} • كاش الدرج:{" "}
+                    <strong style={{ color: "var(--light-gold)" }}>{drawerCash.toLocaleString("ar-EG")} ج.م</strong>
+                  </div>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowAdvanceModal(false)}
+                onClick={() => setShowCashOutModal(false)}
                 style={{
                   background: "transparent",
                   border: 0,
-                  color: "#888",
+                  color: "var(--muted)",
                   cursor: "pointer",
                   padding: 4,
                 }}
@@ -1138,99 +1288,297 @@ export function PosPage({
               </button>
             </div>
 
-            {/* Strict Role Policy Warning */}
+            {/* Financial Control Notice */}
             <div
               style={{
-                background: "rgba(229, 72, 77, 0.12)",
-                border: "1px solid rgba(229, 72, 77, 0.35)",
+                background: "rgba(212, 175, 55, 0.08)",
+                border: "1px solid var(--border-gold)",
                 borderRadius: 10,
                 padding: "10px 14px",
                 marginBottom: 16,
                 fontSize: 12,
-                color: "#FFA8AB",
+                color: "var(--text-secondary)",
                 lineHeight: 1.5,
                 display: "flex",
                 gap: 8,
               }}
             >
-              <Icon name="alert" size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+              <Icon name="alert" size={18} style={{ color: "var(--light-gold)", flexShrink: 0, marginTop: 2 }} />
               <div>
-                <strong>تنبيه الرقابة المالية:</strong> الكاشير يملك صلاحية <u>إضافة السلفة فقط</u>. لا يمكن للكاشير تعديل أو حذف أي سلفة بعد تسجيلها، والتعديل مقتصر على المدير العام.
+                <strong>رقابة الدرج المالي:</strong> يخصم هذا المبلغ فوراً من نقدية الوردية ويُسجل في السجل المالي، ويرسل إشعاراً فورياً على تلجرام الإدارة مع إمكانية طباعة سند صرف ورقي معتمد.
               </div>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Category Selector Tabs */}
+            <div style={{ marginBottom: 14 }}>
+              <label className="form-label" style={{ marginBottom: 6 }}>نوع وبند الصرف *</label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+                {(["سلفة موظف", "مصاريف تشغيل ونثريات", "مسحوبات إدارة", "أخرى"] as CashOutCategory[]).map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setCashOutCategory(cat);
+                      if (cat === "سلفة موظف") {
+                        const b = barbers[0];
+                        if (b) {
+                          setCashOutBarberId(b.id);
+                          setCashOutRecipient(b.name);
+                        }
+                      } else if (cat === "مسحوبات إدارة") {
+                        setCashOutRecipient("المالك / الإدارة العامة");
+                      } else {
+                        setCashOutRecipient("");
+                      }
+                    }}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border: cashOutCategory === cat ? "1.5px solid var(--gold)" : "1px solid var(--border)",
+                      background: cashOutCategory === cat ? "var(--gold-soft)" : "var(--surface)",
+                      color: cashOutCategory === cat ? "var(--light-gold)" : "var(--text-secondary)",
+                      fontWeight: cashOutCategory === cat ? 800 : 600,
+                      fontSize: 12.5,
+                      cursor: "pointer",
+                      textAlign: "center",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* If Employee Advance: Select Barber */}
+              {cashOutCategory === "سلفة موظف" && (
+                <div>
+                  <label className="form-label">الموظف المستلم للسلفة *</label>
+                  <select
+                    className="form-input"
+                    value={cashOutBarberId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setCashOutBarberId(id);
+                      const b = barbers.find((x) => x.id === id);
+                      if (b) setCashOutRecipient(b.name);
+                    }}
+                    style={{ background: "var(--gold-soft)", borderColor: "var(--border-gold)", color: "var(--text)", fontWeight: 700 }}
+                  >
+                    {barbers.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} — {b.title} ({b.status})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Recipient Field (خرج لمين) */}
               <div>
-                <label className="form-label">الموظف المستلم *</label>
-                <select
+                <label className="form-label">خرج لمين (اسم المستلم الفعلي) *</label>
+                <input
+                  type="text"
                   className="form-input"
-                  value={advanceEmpId}
-                  onChange={(e) => setAdvanceEmpId(e.target.value)}
-                  style={{ background: "#1C180E", borderColor: "#5E4E25", color: "#FFF", fontWeight: 700 }}
-                >
-                  {barbers.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} — {b.title} ({b.status})
-                    </option>
-                  ))}
-                </select>
+                  placeholder="مثال: أحمد فتحي (حلاق)، عمرو (عامل البوفيه)، المندوب، المالك..."
+                  value={cashOutRecipient}
+                  onChange={(e) => setCashOutRecipient(e.target.value)}
+                  required
+                />
               </div>
 
+              {/* Amount Field (كام) */}
               <div>
-                <label className="form-label">مبلغ السلفة (ج.م) *</label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label className="form-label">المبلغ الخارج من الدرج (ج.م) *</label>
+                  {Number(cashOutAmount) > drawerCash && (
+                    <span style={{ fontSize: 11, color: "var(--danger-text)", fontWeight: 700 }}>
+                      المبلغ يتجاوز كاش الدرج ({drawerCash} ج.م)
+                    </span>
+                  )}
+                </div>
                 <input
                   type="number"
                   className="form-input"
                   placeholder="مثال: 300"
-                  value={advanceAmount}
-                  onChange={(e) => setAdvanceAmount(e.target.value)}
+                  value={cashOutAmount}
+                  onChange={(e) => setCashOutAmount(e.target.value)}
                   min="1"
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 800,
+                    fontFamily: "Inter, Cairo",
+                    color: "var(--light-gold)",
+                  }}
                   autoFocus
                 />
+                {/* Quick Addition Chips */}
+                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                  {[50, 100, 200, 500, 1000].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => {
+                        const current = Number(cashOutAmount) || 0;
+                        setCashOutAmount(String(current + v));
+                      }}
+                      style={{
+                        padding: "3px 9px",
+                        borderRadius: 6,
+                        border: "1px solid var(--border)",
+                        background: "var(--surface)",
+                        color: "var(--text)",
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      +{v} ج.م
+                    </button>
+                  ))}
+                  {cashOutAmount && (
+                    <button
+                      type="button"
+                      onClick={() => setCashOutAmount("")}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 6,
+                        border: "1px solid var(--danger-border)",
+                        background: "var(--danger-soft)",
+                        color: "var(--danger-text)",
+                        fontSize: 11,
+                        cursor: "pointer",
+                      }}
+                    >
+                      تفريغ
+                    </button>
+                  )}
+                </div>
               </div>
 
+              {/* Reason / Purpose Field (خرج ليه بالتفصيل) */}
               <div>
-                <label className="form-label">سبب السلفة *</label>
+                <label className="form-label">سبب وبيان خروج النقدية (خرج ليه بالتفصيل) *</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="مثال: سلفة علاجية، مشتريات شخصية، ظروف عائلية..."
-                  value={advanceReason}
-                  onChange={(e) => setAdvanceReason(e.target.value)}
+                  placeholder="اكتب البيان بالتفصيل، مثال: شراء شاي وبن وسكر للبوفيه..."
+                  value={cashOutReason}
+                  onChange={(e) => setCashOutReason(e.target.value)}
                 />
+                {/* Reason Quick Suggestions Chips */}
+                <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
+                  {(cashOutCategory === "سلفة موظف"
+                    ? ["سلفة نقدية مستعجلة", "سلفة علاجية", "ظروف عائلية", "سلفة شخصية على الراتب"]
+                    : cashOutCategory === "مسحوبات إدارة"
+                    ? ["مسحوبات نقدية للمالك", "توريد لخزينة المحل", "أرباح دورية للمالك"]
+                    : [
+                        "شراء شاي وبن وسكر ومشروبات",
+                        "مستلزمات نظافة ومطهرات",
+                        "موسات وشفرات حلاقة عاجلة",
+                        "صيانة وإصلاحات عاجلة",
+                        "بنزين وتوصيل طلبات",
+                      ]
+                  ).map((sugg) => (
+                    <button
+                      key={sugg}
+                      type="button"
+                      onClick={() => setCashOutReason(sugg)}
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: 6,
+                        border: "1px dashed var(--border)",
+                        background: "transparent",
+                        color: "var(--text-secondary)",
+                        fontSize: 10.5,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {sugg}
+                    </button>
+                  ))}
+                </div>
               </div>
 
+              {/* Notes (Optional) */}
               <div>
-                <label className="form-label">ملاحظات إضافية</label>
+                <label className="form-label">ملاحظات إضافية (اختياري)</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="ملاحظات تفصيلية أو كود إذن الصرف..."
-                  value={advanceNotes}
-                  onChange={(e) => setAdvanceNotes(e.target.value)}
+                  placeholder="رقم الفاتورة الورقية أو اسم التاجر / المورد..."
+                  value={cashOutNotes}
+                  onChange={(e) => setCashOutNotes(e.target.value)}
                 />
+              </div>
+
+              {/* Print Receipt Voucher Checkbox */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  background: "var(--surface)",
+                  borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  marginTop: 4,
+                  cursor: "pointer",
+                }}
+                onClick={() => setCashOutShouldPrint(!cashOutShouldPrint)}
+              >
+                <input
+                  type="checkbox"
+                  id="printCashOutCheck"
+                  checked={cashOutShouldPrint}
+                  onChange={(e) => setCashOutShouldPrint(e.target.checked)}
+                  style={{ width: 18, height: 18, accentColor: "var(--gold)", cursor: "pointer" }}
+                />
+                <label
+                  htmlFor="printCashOutCheck"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: "var(--text)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Icon name="printer" size={15} style={{ color: "var(--gold)" }} />
+                  <span>طباعة سند صرف نقدية حراري فوري (Thermal Voucher)</span>
+                </label>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+            {/* Modal Actions */}
+            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
               <button
                 type="button"
                 className="primary-btn"
-                onClick={handleSaveAdvanceFromCashier}
-                style={{ flex: 1, height: 44, fontSize: 15 }}
+                onClick={handleConfirmCashOut}
+                disabled={isSubmittingCashOut}
+                style={{ flex: 1, height: 44, fontSize: 14.5, gap: 7 }}
               >
-                <Icon name="check" size={17} />
-                <span>تأكيد تسجيل وصرف السلفة</span>
+                <Icon name="dollarSign" size={17} />
+                <span>
+                  {cashOutShouldPrint
+                    ? `تأكيد خروج ${cashOutAmount ? `${cashOutAmount} ج.م` : "النقدية"} وطباعة السند`
+                    : `تأكيد خروج ${cashOutAmount ? `${cashOutAmount} ج.م` : "النقدية"} من الدرج`}
+                </span>
               </button>
               <button
                 type="button"
-                onClick={() => setShowAdvanceModal(false)}
+                onClick={() => setShowCashOutModal(false)}
+                disabled={isSubmittingCashOut}
                 style={{
                   height: 44,
                   padding: "0 18px",
-                  background: "#1E1E1E",
-                  border: "1px solid #333",
-                  color: "#CCC",
+                  background: "var(--card-hover)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
                   borderRadius: 10,
                   cursor: "pointer",
                   fontWeight: 700,
@@ -1244,10 +1592,110 @@ export function PosPage({
         </div>
       )}
 
+      {/* Hidden Thermal Slip Element specifically for printing Cash Out Voucher */}
+      {cashOutSlipData && (
+        <div
+          id="cash-out-thermal-slip"
+          className={`thermal-paper ${thermalSettings.paperWidth === "58mm" ? "narrow" : ""}`}
+          style={{
+            display: "none",
+            width: thermalSettings.paperWidth === "58mm" ? 216 : 308,
+            padding: thermalSettings.paperWidth === "58mm" ? "14px 10px 18px" : "20px 16px 24px",
+            background: "#ffffff",
+            color: "#000000",
+            direction: "rtl",
+            textAlign: "center",
+            fontFamily: "Cairo, sans-serif",
+          }}
+        >
+          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 2 }}>
+            {thermalSettings.headerTitle || "لمسة خليجي"}
+          </div>
+          <div style={{ fontSize: 11, color: "#444", marginBottom: 2 }}>
+            {thermalSettings.shopAddress || "مساكن الجيش-بجوار بنك ناصر-بجوار سنترال حوده فون"}
+          </div>
+          <div style={{ fontSize: 10.5, color: "#444", marginBottom: 6 }}>
+            هاتف: 01040734582
+          </div>
+          <div style={{ borderBottom: "1.5px dashed #000", margin: "6px 0" }} />
+
+          <div style={{ fontWeight: 800, fontSize: 13, margin: "6px 0" }}>
+            سند صرف نقدية من الدرج
+          </div>
+          <div style={{ fontSize: 10, color: "#333", marginBottom: 8 }}>
+            رقم السند: {cashOutSlipData.voucherId}
+          </div>
+
+          <div
+            style={{
+              textAlign: "right",
+              fontSize: 11,
+              lineHeight: 1.6,
+              background: "#f9f9f9",
+              padding: 8,
+              borderRadius: 4,
+              border: "1px solid #ddd",
+            }}
+          >
+            <div><strong>التاريخ والوقت:</strong> {cashOutSlipData.date} - {cashOutSlipData.time}</div>
+            <div><strong>الكاشير:</strong> {activeCashier} (وردية #{cashOutSlipData.shiftNumber})</div>
+            <div><strong>نوع الصرف:</strong> {cashOutSlipData.category}</div>
+            <div>
+              <strong>خرج لمين (المستلم):</strong> <span style={{ fontWeight: 800 }}>{cashOutSlipData.recipient}</span>
+            </div>
+            <div><strong>السبب والبيان:</strong> {cashOutSlipData.reason}</div>
+            {cashOutSlipData.notes && <div><strong>ملاحظات:</strong> {cashOutSlipData.notes}</div>}
+          </div>
+
+          <div style={{ borderBottom: "1.5px dashed #000", margin: "10px 0" }} />
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              fontSize: 13,
+              fontWeight: 900,
+              padding: "4px 0",
+            }}
+          >
+            <span>المبلغ المنصرف:</span>
+            <span
+              style={{
+                fontSize: 16,
+                border: "1.5px solid #000",
+                padding: "2px 8px",
+                borderRadius: 4,
+                fontFamily: "Inter, Cairo",
+              }}
+            >
+              {cashOutSlipData.amount.toLocaleString("ar-EG")} ج.م
+            </span>
+          </div>
+
+          <div style={{ borderBottom: "1.5px dashed #000", margin: "10px 0" }} />
+
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24, fontSize: 10.5 }}>
+            <div style={{ textAlign: "center" }}>
+              <div>توقيع المستلم</div>
+              <div style={{ marginTop: 26 }}>....................</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div>توقيع الكاشير / المسؤول</div>
+              <div style={{ marginTop: 26 }}>....................</div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 9.5, color: "#666", marginTop: 16, textAlign: "center" }}>
+            نظام لمسة خليجي لإدارة الصالونات • سند مالي معتمد
+          </div>
+        </div>
+      )}
+
       {/* Floating Toast Notification */}
       {notification && (
         <div className="toast-bar">
-          <Icon name="check" size={18} style={{ color: "#3FB950" } as React.CSSProperties} />
+          <Icon name="check" size={18} style={{ color: "var(--success-text)" } as React.CSSProperties} />
           <span>{notification}</span>
         </div>
       )}

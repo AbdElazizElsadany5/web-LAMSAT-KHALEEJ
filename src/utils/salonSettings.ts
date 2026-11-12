@@ -7,21 +7,52 @@ export interface SalonSettings {
   phone: string;
   taxNumber: string;
   commercialReg: string;
+  qrPortalUrl?: string;
 }
 
 export const defaultSalonSettings: SalonSettings = {
-  salonName: "صالون لمسة الفاخر",
+  salonName: "لمسة خليجي",
   brandSub: "LAMSAT KHALEEJI",
-  address: "القاهرة الجديدة - التجمع الخامس (شارع التسعين)",
-  phone: "01099887766",
+  address: "مساكن الجيش-بجوار بنك ناصر-بجوار سنترال حوده فون",
+  phone: "01040734582",
   taxNumber: "412890331",
   commercialReg: "204910",
+  qrPortalUrl: "https://hassan-obaed.github.io/LAMSAT-KHALEEJI/",
 };
 
 const SALON_SETTINGS_KEY = "salon_settings";
 
 export function getSalonSettings(): SalonSettings {
-  return secureStorage.getItem<SalonSettings>(SALON_SETTINGS_KEY, defaultSalonSettings);
+  const stored = secureStorage.getItem<SalonSettings>(SALON_SETTINGS_KEY, defaultSalonSettings);
+  let needsResave = false;
+  const updated = { ...stored };
+
+  if (updated.salonName === "صالون لمسة الفاخر" || updated.salonName === "صالون لمسة") {
+    updated.salonName = "لمسة خليجي";
+    needsResave = true;
+  }
+  if (!updated.address || updated.address.includes("التجمع") || updated.address.includes("التسعين")) {
+    updated.address = defaultSalonSettings.address;
+    needsResave = true;
+  }
+  if (!updated.phone || updated.phone === "01099887766" || updated.phone.startsWith("010xxxx")) {
+    updated.phone = defaultSalonSettings.phone;
+    needsResave = true;
+  }
+  if (
+    !updated.qrPortalUrl ||
+    updated.qrPortalUrl.includes("vercel.app") ||
+    updated.qrPortalUrl.includes("lamsat-khaleeji.com")
+  ) {
+    updated.qrPortalUrl = defaultSalonSettings.qrPortalUrl;
+    needsResave = true;
+  }
+
+  if (needsResave) {
+    secureStorage.setItem(SALON_SETTINGS_KEY, updated);
+  }
+
+  return updated;
 }
 
 export function saveSalonSettings(settings: Partial<SalonSettings>): SalonSettings {

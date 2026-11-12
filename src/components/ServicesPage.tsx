@@ -143,8 +143,8 @@ export function ServicesPage({
       {/* Filter and View Bar */}
       <div
         style={{
-          background: "#141414",
-          border: "1px solid #2B2519",
+          background: "var(--card)",
+          border: "1px solid var(--border)",
           borderRadius: 14,
           padding: 16,
           marginBottom: 20,
@@ -186,8 +186,8 @@ export function ServicesPage({
         {/* View Switcher */}
         <div
           style={{
-            background: "#181818",
-            border: "1px solid #2B2519",
+            background: "var(--surface-soft)",
+            border: "1px solid var(--border)",
             borderRadius: 8,
             padding: 3,
             display: "flex",
@@ -200,8 +200,8 @@ export function ServicesPage({
             style={{
               padding: "6px 12px",
               borderRadius: 6,
-              background: viewMode === "cards" ? "#D4AF37" : "transparent",
-              color: viewMode === "cards" ? "#111" : "#AAA",
+              background: viewMode === "cards" ? "var(--gold)" : "transparent",
+              color: viewMode === "cards" ? "#111" : "var(--text-secondary)",
               border: 0,
               fontWeight: 700,
               fontSize: 12,
@@ -216,8 +216,8 @@ export function ServicesPage({
             style={{
               padding: "6px 12px",
               borderRadius: 6,
-              background: viewMode === "table" ? "#D4AF37" : "transparent",
-              color: viewMode === "table" ? "#111" : "#AAA",
+              background: viewMode === "table" ? "var(--gold)" : "transparent",
+              color: viewMode === "table" ? "#111" : "var(--text-secondary)",
               border: 0,
               fontWeight: 700,
               fontSize: 12,
@@ -236,8 +236,8 @@ export function ServicesPage({
             <div
               key={srv.id}
               style={{
-                background: "#161616",
-                border: "1px solid #28241B",
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
                 borderRadius: 14,
                 padding: 18,
                 display: "flex",
@@ -252,8 +252,8 @@ export function ServicesPage({
                     style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      color: srv.isPackage ? "#FF9F1C" : "#9E9E9E",
-                      background: srv.isPackage ? "rgba(255, 159, 28, 0.15)" : "#222",
+                      color: srv.isPackage ? "var(--warning-text)" : "var(--muted)",
+                      background: srv.isPackage ? "rgba(255, 159, 28, 0.15)" : "var(--surface-soft)",
                       padding: "3px 8px",
                       borderRadius: 6,
                     }}
@@ -279,27 +279,27 @@ export function ServicesPage({
                   </button>
                 </div>
 
-                <div style={{ fontSize: 17, fontWeight: 800, color: "#FFF", marginBottom: 6 }}>
+                <div style={{ fontSize: 17, fontWeight: 800, color: "var(--text)", marginBottom: 6 }}>
                   {srv.name}
                 </div>
 
-                <div style={{ fontSize: 13, color: "#8E8E8E", marginBottom: 12, minHeight: 38, lineHeight: 1.4 }}>
+                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, minHeight: 38, lineHeight: 1.4 }}>
                   {srv.description || "خدمة راقية مقدمة بأفضل معايير العناية"}
                 </div>
 
                 {srv.includedServices && srv.includedServices.length > 0 && (
                   <div
                     style={{
-                      background: "#121212",
-                      border: "1px solid #221E15",
+                      background: "var(--surface-deep)",
+                      border: "1px solid var(--border-subtle)",
                       borderRadius: 8,
                       padding: "8px 10px",
                       marginBottom: 12,
                       fontSize: 12,
-                      color: "#CCC",
+                      color: "var(--text-secondary)",
                     }}
                   >
-                    <span style={{ color: "#D4AF37", fontWeight: 700 }}>تشمل الباقة: </span>
+                    <span style={{ color: "var(--gold)", fontWeight: 700 }}>تشمل الباقة: </span>
                     {srv.includedServices.join(" + ")}
                   </div>
                 )}
@@ -312,20 +312,20 @@ export function ServicesPage({
                     alignItems: "center",
                     justifyContent: "space-between",
                     paddingTop: 10,
-                    borderTop: "1px solid #252017",
+                    borderTop: "1px solid var(--border-subtle)",
                     marginBottom: 12,
                   }}
                 >
                   <div>
-                    <span style={{ fontSize: 11, color: "#777" }}>المدة التقديرية</span>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#DDD", fontFamily: "Inter" }}>
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>المدة التقديرية</span>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", fontFamily: "Inter" }}>
                       {srv.duration} دقيقة
                     </div>
                   </div>
 
                   <div style={{ textAlign: "left" }}>
-                    <span style={{ fontSize: 11, color: "#777" }}>السعر النهائي</span>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: "#F5C242", fontFamily: "Inter" }}>
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>السعر النهائي</span>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: "var(--light-gold)", fontFamily: "Inter" }}>
                       {srv.price} <small style={{ fontSize: 12, fontFamily: "Cairo" }}>ج.م</small>
                     </div>
                   </div>
@@ -347,12 +347,12 @@ export function ServicesPage({
                     className="danger-ghost"
                     style={{ height: 36, padding: "0 10px" }}
                     onClick={() => {
-                      if (confirm(`هل أنت متأكد من أرشفة خدمة «${srv.name}»؟`)) {
+                      if (confirm(`هل أنت متأكد من حذف خدمة «${srv.name}» نهائياً من قائمة الحلاقة؟`)) {
                         onArchiveService(srv.id);
-                        showToast(`تمت أرشفة الخدمة بنجاح`);
+                        showToast(`تم حذف خدمة «${srv.name}» بنجاح وتحديث النظام`);
                       }
                     }}
-                    title="أرشفة الخدمة"
+                    title="حذف الخدمة"
                   >
                     <Icon name="trash" size={14} />
                   </button>
@@ -379,17 +379,17 @@ export function ServicesPage({
               {filteredServices.map((srv) => (
                 <tr key={srv.id}>
                   <td>
-                    <div style={{ fontWeight: 800, color: "#FFF" }}>{srv.name}</div>
+                    <div style={{ fontWeight: 800, color: "var(--text)" }}>{srv.name}</div>
                     {srv.description && (
-                      <div style={{ fontSize: 12, color: "#777" }}>{srv.description}</div>
+                      <div style={{ fontSize: 12, color: "var(--muted)" }}>{srv.description}</div>
                     )}
                   </td>
                   <td>
-                    <span style={{ padding: "3px 8px", borderRadius: 6, background: "#1E1E1E", fontSize: 12 }}>
+                    <span style={{ padding: "3px 8px", borderRadius: 6, background: "var(--card-hover)", fontSize: 12 }}>
                       {srv.category}
                     </span>
                   </td>
-                  <td style={{ fontWeight: 800, fontSize: 17, color: "#F5C242", fontFamily: "Inter" }}>
+                  <td style={{ fontWeight: 800, fontSize: 17, color: "var(--light-gold)", fontFamily: "Inter" }}>
                     {srv.price} ج.م
                   </td>
                   <td style={{ fontFamily: "Inter" }}>{srv.duration} دقيقة</td>
@@ -420,8 +420,13 @@ export function ServicesPage({
                         type="button"
                         className="danger-ghost"
                         style={{ height: 32, padding: "0 8px" }}
-                        onClick={() => onArchiveService(srv.id)}
-                        title="أرشفة"
+                        onClick={() => {
+                          if (confirm(`هل أنت متأكد من حذف خدمة «${srv.name}» نهائياً من قائمة الحلاقة؟`)) {
+                            onArchiveService(srv.id);
+                            showToast(`تم حذف خدمة «${srv.name}» بنجاح وتحديث النظام`);
+                          }
+                        }}
+                        title="حذف الخدمة"
                       >
                         <Icon name="trash" size={13} />
                       </button>
@@ -443,7 +448,7 @@ export function ServicesPage({
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
@@ -540,7 +545,7 @@ export function ServicesPage({
       {/* Floating Toast Notification */}
       {toastMsg && (
         <div className="toast-bar">
-          <Icon name="check" size={18} style={{ color: "#3FB950" } as React.CSSProperties} />
+          <Icon name="check" size={18} style={{ color: "var(--success-text)" } as React.CSSProperties} />
           <span>{toastMsg}</span>
         </div>
       )}

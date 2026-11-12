@@ -102,38 +102,86 @@ export function AdminUsers({
       </div>
 
       {modalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: 420 }}>
+        <div className="modal-overlay" onClick={() => setModalOpen(false)}>
+          <div className="modal-box" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <h2>إضافة مستخدم جديد</h2>
-              <button type="button" onClick={() => setModalOpen(false)} style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: "var(--gold-soft)",
+                    color: "var(--light-gold)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Icon name="users" size={18} />
+                </span>
+                <div>
+                  <h2 style={{ fontSize: 17, margin: 0 }}>إضافة مستخدم جديد</h2>
+                  <p style={{ fontSize: 12, color: "var(--muted)", margin: "2px 0 0" }}>
+                    إنشاء حساب دخول للكاشير أو مشرف الصالة
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer", padding: 4 }}
+              >
                 <Icon name="x" size={18} />
               </button>
             </div>
-            <form onSubmit={handleAddUser}>
-              <div className="form-group">
-                <label className="form-label">الاسم بالكامل:</label>
-                <input type="text" className="form-input" placeholder="مثال: حسام حسن" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+            <form onSubmit={handleAddUser} style={{ display: "flex", flexDirection: "column", flex: 1, margin: 0 }}>
+              <div className="modal-body" style={{ gap: 14 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">الاسم بالكامل *:</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="مثال: حسام حسن"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">اسم المستخدم للدخول (Username) *:</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="مثال: cashier_morning"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    style={{ direction: "ltr", textAlign: "right", fontFamily: "Inter, monospace" }}
+                    required
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">الدور / الصلاحيات:</label>
+                  <select className="form-input" value={role} onChange={(e) => setRole(e.target.value)}>
+                    <option value="كاشير مناوب">كاشير مناوب (مبيعات وفواتير فقط)</option>
+                    <option value="مشرف صالة">مشرف صالة (مبيعات + تقارير محدودة)</option>
+                    <option value="أدمن (مدير عام)">أدمن (كامل الصلاحيات والتحكم)</option>
+                  </select>
+                </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">اسم المستخدم للطرفية (Username):</label>
-                <input type="text" className="form-input" placeholder="cashier_morning" value={username} onChange={(e) => setUsername(e.target.value)} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label">الدور / الصلاحيات:</label>
-                <select className="form-input" value={role} onChange={(e) => setRole(e.target.value)}>
-                  <option value="كاشير مناوب">كاشير (مبيعات وفواتير فقط)</option>
-                  <option value="مشرف صالة">مشرف صالة (مبيعات + تقارير محدودة)</option>
-                  <option value="أدمن (مدير عام)">أدمن (كامل الصلاحيات والتحكم)</option>
-                </select>
-              </div>
-              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                <button type="submit" className="primary-btn" style={{ flex: 1, height: 42 }}>
+              <div className="modal-foot">
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => setModalOpen(false)}
+                  style={{ height: 42, padding: "0 20px" }}
+                >
+                  إلغاء
+                </button>
+                <button type="submit" className="primary-btn" style={{ height: 42, padding: "0 24px", gap: 6 }}>
                   <span>حفظ الحساب</span>
                   <Icon name="check" size={16} />
-                </button>
-                <button type="button" className="secondary-btn" onClick={() => setModalOpen(false)} style={{ height: 42 }}>
-                  إلغاء
                 </button>
               </div>
             </form>

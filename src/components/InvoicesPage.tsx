@@ -42,8 +42,7 @@ export function InvoicesPage({
     return invoices.filter((inv) => {
       const matchSearch =
         inv.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.customerPhone.includes(searchQuery);
+        inv.customerName.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchMethod = methodFilter === "الكل" || inv.paymentMethod === methodFilter;
       const matchStatus = statusFilter === "الكل" || inv.status === statusFilter;
@@ -147,7 +146,7 @@ export function InvoicesPage({
               <span>{completedCount} مكتملة • {refundedCount} مسترجعة/ملغاة</span>
             </div>
           </div>
-          <div className="kpi-icon-wrap" style={{ color: "#F5C242", borderColor: "#554215" }}>
+          <div className="kpi-icon-wrap" style={{ color: "var(--light-gold)", borderColor: "var(--border-gold)" }}>
             <Icon name="receipt" size={20} />
           </div>
         </div>
@@ -160,7 +159,7 @@ export function InvoicesPage({
               <span>لكل عميل زائر</span>
             </div>
           </div>
-          <div className="kpi-icon-wrap" style={{ color: "#3FB950", borderColor: "#1A4522" }}>
+          <div className="kpi-icon-wrap" style={{ color: "var(--success-text)", borderColor: "var(--success-border)" }}>
             <Icon name="chart" size={20} />
           </div>
         </div>
@@ -168,14 +167,14 @@ export function InvoicesPage({
         <div className="kpi-card">
           <div>
             <div className="kpi-label">المسترجعات والإلغاء</div>
-            <div className="kpi-value" style={{ color: refundedCount > 0 ? "#FF8E92" : "#999" }}>
+            <div className="kpi-value" style={{ color: refundedCount > 0 ? "var(--danger-text)" : "var(--muted)" }}>
               {refundedCount} <small style={{ fontSize: 14 }}>عملية</small>
             </div>
-            <div className="kpi-hint" style={{ color: refundedCount > 0 ? "#FF8E92" : "#888" }}>
+            <div className="kpi-hint" style={{ color: refundedCount > 0 ? "var(--danger-text)" : "var(--muted)" }}>
               <span>تتطلب اعتماد الأدمن بكلمة المرور</span>
             </div>
           </div>
-          <div className="kpi-icon-wrap" style={{ color: "#E5484D", borderColor: "#5A1E20" }}>
+          <div className="kpi-icon-wrap" style={{ color: "var(--danger-text)", borderColor: "var(--danger-border)" }}>
             <Icon name="alert" size={20} />
           </div>
         </div>
@@ -204,8 +203,8 @@ export function InvoicesPage({
         {/* Filter Bar */}
         <div
           style={{
-            background: "#181818",
-            border: "1px solid #2B2519",
+            background: "var(--surface-soft)",
+            border: "1px solid var(--border)",
             borderRadius: 12,
             padding: 16,
             marginBottom: 20,
@@ -240,6 +239,7 @@ export function InvoicesPage({
             >
               <option value="الكل">كل طرق الدفع</option>
               <option value="نقداً">نقداً</option>
+              <option value="محافظ إلكترونية">محافظ إلكترونية</option>
               <option value="بطاقة">بطاقة</option>
               <option value="إنستاباي">إنستاباي</option>
               <option value="دفع مختلط">دفع مختلط</option>
@@ -297,26 +297,23 @@ export function InvoicesPage({
             <tbody>
               {filteredInvoices.map((inv) => (
                 <tr key={inv.id}>
-                  <td style={{ fontWeight: 800, color: "#F5C242", fontFamily: "Inter" }}>
+                  <td style={{ fontWeight: 800, color: "var(--light-gold)", fontFamily: "Inter" }}>
                     {inv.id}
                   </td>
                   <td>
                     <div style={{ fontWeight: 700 }}>{inv.customerName}</div>
-                    <div style={{ fontSize: 11, color: "#888", fontFamily: "Inter", direction: "ltr", textAlign: "right" }}>
-                      {getMaskedPhone(inv.customerPhone, inv.id)}
-                    </div>
                   </td>
-                  <td style={{ fontSize: 13, color: "#AAA" }}>
+                  <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>
                     <div>{inv.date}</div>
-                    <div style={{ fontSize: 11, color: "#777", fontFamily: "Inter" }}>{inv.time}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "Inter" }}>{inv.time}</div>
                   </td>
                   <td style={{ fontSize: 13, maxWidth: 200 }}>
                     {inv.items.map((i) => i.name).join("، ")}
                   </td>
-                  <td style={{ fontSize: 13, color: "#D4AF37" }}>
+                  <td style={{ fontSize: 13, color: "var(--gold)" }}>
                     {[...new Set(inv.items.map((i) => i.barber))].join("، ")}
                   </td>
-                  <td style={{ fontWeight: 800, fontSize: 16, color: "#F5C242", fontFamily: "Inter" }}>
+                  <td style={{ fontWeight: 800, fontSize: 16, color: "var(--light-gold)", fontFamily: "Inter" }}>
                     {inv.total} <small style={{ fontSize: 11, fontFamily: "Cairo" }}>ج.م</small>
                   </td>
                   <td>
@@ -324,13 +321,13 @@ export function InvoicesPage({
                       style={{
                         padding: "3px 8px",
                         borderRadius: 6,
-                        background: "#1E1E1E",
+                        background: "var(--card-hover)",
                         fontSize: 12,
                         fontWeight: 600,
-                        color: "#DDD",
+                        color: "var(--text)",
                       }}
                     >
-                      {inv.paymentMethod}
+                      {inv.walletProvider ? `${inv.paymentMethod} (${inv.walletProvider})` : inv.paymentMethod}
                     </span>
                   </td>
                   <td>
@@ -347,7 +344,7 @@ export function InvoicesPage({
                       {inv.status}
                     </span>
                   </td>
-                  <td style={{ fontSize: 13, color: "#AAA" }}>{inv.cashierName}</td>
+                  <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{inv.cashierName}</td>
                   <td>
                     <button
                       type="button"
@@ -364,7 +361,7 @@ export function InvoicesPage({
 
               {filteredInvoices.length === 0 && (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: "center", padding: "40px 20px", color: "#888" }}>
+                  <td colSpan={10} style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)" }}>
                     لا توجد فواتير مطابقة للبحث
                   </td>
                 </tr>
@@ -388,7 +385,7 @@ export function InvoicesPage({
               <button
                 type="button"
                 onClick={() => setSelectedInvoice(null)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
@@ -398,8 +395,8 @@ export function InvoicesPage({
               {/* Top Banner: Status & Customer Info */}
               <div
                 style={{
-                  background: "#181818",
-                  border: "1px solid #2B2519",
+                  background: "var(--surface-soft)",
+                  border: "1px solid var(--border)",
                   borderRadius: 12,
                   padding: 16,
                   marginBottom: 20,
@@ -409,43 +406,14 @@ export function InvoicesPage({
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 12, color: "#888" }}>بيانات العميل:</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: "#FFF", marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>بيانات العميل:</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", marginTop: 2 }}>
                     {selectedInvoice.customerName}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
-                    <span style={{ fontSize: 13, fontFamily: "Inter", color: "#DDD" }}>
-                      الهاتف: {getMaskedPhone(selectedInvoice.customerPhone, selectedInvoice.id)}
-                    </span>
-
-                    {/* Unmask Phone Button (Requires Admin Password) */}
-                    {!revealedPhones[selectedInvoice.id] && (
-                      <button
-                        type="button"
-                        onClick={handleRequestRevealPhone}
-                        style={{
-                          background: "#221C11",
-                          border: "1px solid #D4AF37",
-                          color: "#F5C242",
-                          padding: "2px 8px",
-                          borderRadius: 6,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        <Icon name="lock" size={11} />
-                        <span>كشف الرقم الكامل</span>
-                      </button>
-                    )}
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 12, color: "#888" }}>حالة الفاتورة وطريقة الدفع:</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>حالة الفاتورة وطريقة الدفع:</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
                     <span
                       className={`badge ${
@@ -459,19 +427,27 @@ export function InvoicesPage({
                       <i />
                       {selectedInvoice.status}
                     </span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#DDD" }}>
-                      طريقة الدفع: {selectedInvoice.paymentMethod}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+                      طريقة الدفع:{" "}
+                      {selectedInvoice.walletProvider
+                        ? `${selectedInvoice.paymentMethod} (${selectedInvoice.walletProvider})`
+                        : selectedInvoice.paymentMethod}
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
-                    الكاشير: <strong style={{ color: "#FFF" }}>{selectedInvoice.cashierName}</strong>
+                  {selectedInvoice.walletSenderNumber && (
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                      محوّل من رقم: <strong style={{ color: "var(--light-gold)", fontFamily: "Inter" }}>{selectedInvoice.walletSenderNumber}</strong>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                    الكاشير: <strong style={{ color: "var(--text)" }}>{selectedInvoice.cashierName}</strong>
                   </div>
                 </div>
               </div>
 
               {/* Items List */}
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#AAA", marginBottom: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 10 }}>
                   الخدمات المقدمة وتفاصيل الفاتورة:
                 </div>
                 <div className="data-table-wrap">
@@ -489,10 +465,10 @@ export function InvoicesPage({
                       {selectedInvoice.items.map((it, idx) => (
                         <tr key={idx}>
                           <td style={{ fontWeight: 700 }}>{it.name}</td>
-                          <td style={{ color: "#D4AF37" }}>{it.barber}</td>
+                          <td style={{ color: "var(--gold)" }}>{it.barber}</td>
                           <td style={{ fontFamily: "Inter" }}>{it.qty}</td>
                           <td style={{ fontFamily: "Inter" }}>{it.price} ج.م</td>
-                          <td style={{ fontWeight: 800, fontFamily: "Inter", color: "#F5C242" }}>
+                          <td style={{ fontWeight: 800, fontFamily: "Inter", color: "var(--light-gold)" }}>
                             {it.price * it.qty} ج.م
                           </td>
                         </tr>
@@ -505,8 +481,8 @@ export function InvoicesPage({
               {/* Financial Totals */}
               <div
                 style={{
-                  background: "#161616",
-                  border: "1px solid #28241B",
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--border)",
                   borderRadius: 12,
                   padding: 16,
                   display: "flex",
@@ -514,18 +490,18 @@ export function InvoicesPage({
                   gap: 8,
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#AAA" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--text-secondary)" }}>
                   <span>المجموع الفرعي:</span>
                   <span className="num">{selectedInvoice.subtotal} ج.م</span>
                 </div>
                 {selectedInvoice.discount > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#56D364" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--success-text)" }}>
                     <span>الخصم المطبق ({selectedInvoice.couponCode}):</span>
                     <span className="num">-{selectedInvoice.discount} ج.م</span>
                   </div>
                 )}
                 {selectedInvoice.tip > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "#FF9F1C" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: "var(--warning-text)" }}>
                     <span>إكرامية الحلاق:</span>
                     <span className="num">+{selectedInvoice.tip} ج.م</span>
                   </div>
@@ -536,13 +512,13 @@ export function InvoicesPage({
                     justifyContent: "space-between",
                     fontSize: 18,
                     fontWeight: 800,
-                    color: "#FFF",
-                    borderTop: "1px dashed #333",
+                    color: "var(--text)",
+                    borderTop: "1px dashed var(--border-strong)",
                     paddingTop: 8,
                   }}
                 >
                   <span>المبلغ المسدد بالكامل:</span>
-                  <span style={{ color: "#F5C242", fontSize: 24, fontFamily: "Inter" }}>
+                  <span style={{ color: "var(--light-gold)", fontSize: 24, fontFamily: "Inter" }}>
                     {selectedInvoice.total} ج.م
                   </span>
                 </div>
@@ -553,8 +529,8 @@ export function InvoicesPage({
                   style={{
                     marginTop: 14,
                     background: "rgba(229, 72, 77, 0.12)",
-                    border: "1px solid #E5484D",
-                    color: "#FF8E92",
+                    border: "1px solid var(--danger-text)",
+                    color: "var(--danger-text)",
                     padding: "10px 14px",
                     borderRadius: 8,
                     fontSize: 13,
@@ -569,8 +545,8 @@ export function InvoicesPage({
                   style={{
                     marginTop: 14,
                     background: "rgba(255, 159, 28, 0.12)",
-                    border: "1px solid #FF9F1C",
-                    color: "#FFAE42",
+                    border: "1px solid var(--warning-border)",
+                    color: "var(--warning-text)",
                     padding: "10px 14px",
                     borderRadius: 8,
                     fontSize: 13,
@@ -596,7 +572,7 @@ export function InvoicesPage({
                     <button
                       type="button"
                       className="secondary-btn"
-                      style={{ color: "#FFAE42", borderColor: "#553810" }}
+                      style={{ color: "var(--warning-text)", borderColor: "var(--warning-border)" }}
                       onClick={() => setRefundModalOpen(true)}
                     >
                       <Icon name="refresh" size={14} />
@@ -638,13 +614,13 @@ export function InvoicesPage({
               <button
                 type="button"
                 onClick={() => setPasswordModalOpen(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
             </div>
             <div className="modal-body">
-              <p style={{ fontSize: 13, color: "#CCC", lineHeight: 1.5, marginBottom: 14 }}>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 14 }}>
                 حماية لخصوصية العملاء، يتطلب كشف رقم الهاتف الكامل إدخال كلمة مرور الأدمن. سيتم توثيق هذا الإجراء واسم القائم به في سجل العمليات والتدقيق تلقائياً.
               </p>
               <div className="form-group">
@@ -663,7 +639,7 @@ export function InvoicesPage({
               </div>
 
               <div className="form-group">
-                <label className="form-label" style={{ color: "#FFAE42" }}>
+                <label className="form-label" style={{ color: "var(--warning-text)" }}>
                   سبب كشف رقم الهاتف (إلزامي للتوثيق):
                 </label>
                 <input
@@ -677,7 +653,7 @@ export function InvoicesPage({
                   placeholder="مثال: التحقق من موعد أو شكوى متعلقة بالخدمة..."
                 />
                 {passwordError && (
-                  <div style={{ fontSize: 12, color: "#FF8E92", marginTop: 4, fontWeight: 600 }}>
+                  <div style={{ fontSize: 12, color: "var(--danger-text)", marginTop: 4, fontWeight: 600 }}>
                     {passwordError}
                   </div>
                 )}
@@ -708,21 +684,21 @@ export function InvoicesPage({
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 480 }}>
             <div className="modal-head">
-              <h2 style={{ color: "#FF8E92" }}>إلغاء الفاتورة {selectedInvoice.id}</h2>
+              <h2 style={{ color: "var(--danger-text)" }}>إلغاء الفاتورة {selectedInvoice.id}</h2>
               <button
                 type="button"
                 onClick={() => setCancelModalOpen(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
             </div>
             <div className="modal-body">
-              <p style={{ fontSize: 13, color: "#CCC", marginBottom: 14 }}>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 14 }}>
                 سيتم إلغاء الفاتورة وعكس تأثيرها المالي على رصيد الصندوق، وتوثيق ذلك في سجل العمليات.
               </p>
               <div className="form-group">
-                <label className="form-label" style={{ color: "#FF8E92" }}>
+                <label className="form-label" style={{ color: "var(--danger-text)" }}>
                   سبب الإلغاء (إلزامي):
                 </label>
                 <textarea
@@ -759,21 +735,21 @@ export function InvoicesPage({
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: 480 }}>
             <div className="modal-head">
-              <h2 style={{ color: "#FFAE42" }}>استرجاع الفاتورة {selectedInvoice.id}</h2>
+              <h2 style={{ color: "var(--warning-text)" }}>استرجاع الفاتورة {selectedInvoice.id}</h2>
               <button
                 type="button"
                 onClick={() => setRefundModalOpen(false)}
-                style={{ background: "transparent", border: 0, color: "#888", cursor: "pointer" }}
+                style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer" }}
               >
                 <Icon name="x" size={20} />
               </button>
             </div>
             <div className="modal-body">
-              <p style={{ fontSize: 13, color: "#CCC", marginBottom: 14 }}>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 14 }}>
                 سيتم استرجاع المبلغ ({selectedInvoice.total} ج.م) للعميل وخصمه من مبيعات الوردية وتوثيق العملية في سجل العمليات.
               </p>
               <div className="form-group">
-                <label className="form-label" style={{ color: "#FFAE42" }}>
+                <label className="form-label" style={{ color: "var(--warning-text)" }}>
                   سبب الاسترجاع (إلزامي):
                 </label>
                 <textarea
@@ -808,7 +784,7 @@ export function InvoicesPage({
       {/* Floating Toast Notification */}
       {toastMsg && (
         <div className="toast-bar">
-          <Icon name="check" size={18} style={{ color: "#3FB950" } as React.CSSProperties} />
+          <Icon name="check" size={18} style={{ color: "var(--success-text)" } as React.CSSProperties} />
           <span>{toastMsg}</span>
         </div>
       )}
