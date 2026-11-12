@@ -40,6 +40,7 @@ export function PaymentModal({
   const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [printSuccessMsg, setPrintSuccessMsg] = useState("");
+  const [printerWarning, setPrinterWarning] = useState<string | null>(null);
   const [thermalSettings, setThermalSettings] = useState<ThermalSettings>(getThermalSettings);
 
   useEffect(() => {
@@ -132,39 +133,53 @@ export function PaymentModal({
     sfx.playCashRegister();
     onPaymentSuccess(invoice);
 
-    // Auto-print receipt immediately after payment confirmation, then automatically close and return to POS
+    // Check printer and trigger thermal print on payment completion without closing modal
     setTimeout(() => {
-      void triggerThermalPrint(false, true);
+      void triggerThermalPrint(false);
     }, 250);
   };
 
-  // Print Thermal Receipt (Electron silent ESC/POS with controlled fallback and auto-close back to POS)
-  const triggerThermalPrint = async (allowDialogFallback = true, shouldAutoClose = true) => {
+  // Print Thermal Receipt (checks physical printer connection and alerts if disconnected)
+  const triggerThermalPrint = async (allowDialogFallback = false) => {
     sfx.playThermalPrint();
     setIsPrinting(true);
-    setPrintSuccessMsg("جارٍ طباعة الإيصال...");
+    setPrintSuccessMsg("جارٍ فحص الطابعة والطباعة...");
 
     try {
       const res = await executeReceiptPrint({
         allowDialogOnVirtualPrinter: allowDialogFallback,
       });
-      setPrintSuccessMsg(`${res.message} — جارٍ العودة لشاشة الكاشير...`);
-      if (shouldAutoClose) {
-        setTimeout(() => {
-          onClose();
-        }, 650);
+
+      if (res.printedSilently) {
+        setPrinterWarning(null);
+        setPrintSuccessMsg(res.message);
+      } else if (res.usedDialog) {
+        setPrintSuccessMsg(res.message);
+      } else {
+        // No thermal printer connected
+        setPrinterWarning(res.message || "تنبيه: لا توجد طابعة إيصالات حرارية متصلة بالجهاز حالياً!");
+        setPrintSuccessMsg("");
       }
     } catch {
-      if (shouldAutoClose) {
-        setTimeout(() => {
-          onClose();
-        }, 850);
-      }
+      setPrinterWarning("تنبيه: تعذر الاتصال بالطابعة الحرارية — تأكد من تشغيلها وتوصيل الكابل.");
+      setPrintSuccessMsg("");
     } finally {
       setIsPrinting(false);
-      setTimeout(() => setPrintSuccessMsg(""), 6000);
     }
   };
+
+  // Keyboard shortcut to start a new order when invoice is on screen
+  useEffect(() => {
+    if (!isSuccess) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F2") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSuccess, onClose]);
 
   return (
     <div className="modal-overlay">
@@ -562,7 +577,7 @@ export function PaymentModal({
                   <button
                     type="button"
                     className="primary-btn"
-                    onClick={() => void triggerThermalPrint(true, true)}
+                    onClick={() => void triggerThermalPrint(true)}
                     disabled={isPrinting}
                   >
                     <Icon name="printer" size={17} />
@@ -572,19 +587,85 @@ export function PaymentModal({
                     type="button"
                     className="secondary-btn"
                     onClick={onClose}
+                    style={{ background: "var(--gold-soft)", borderColor: "var(--border-gold)", color: "var(--light-gold)", fontWeight: 800 }}
                   >
                     <Icon name="plus" size={16} />
-                    <span>بدء طلب جديد (F2)</span>
+                    <span>بدء أوردر جديد (F2)</span>
                   </button>
                 </div>
               </div>
 
-              {printSuccessMsg && (
+              {/* Warning Banner if Thermal Printer is Disconnected */}
+              {printerWarning && (
                 <div
                   style={{
-                    background: "var(--gold-soft)",
-                    border: "1px solid var(--gold)",
-                    color: "var(--light-gold)",
+                    background: "rgba(231, 76, 60, 0.12)",
+                    border: "1.5px solid rgba(231, 76, 60, 0.35)",
+                    borderRadius: 12,
+                    padding: "14px 18px",
+                    marginBottom: 16,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 10,
+                        background: "rgba(231, 76, 60, 0.2)",
+                        color: "#ff6b6b",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Icon name="alertCircle" size={22} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14.5, fontWeight: 900, color: "#ff6b6b" }}>
+                        {printerWarning}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                        يمكنك مراجعة وتدقيق بيانات الفاتورة الموضحة أدناه. لن يتم إغلاق هذه الشاشة حتى تقوم بتوصيل الطابعة وإعادة المحاولة، أو الضغط على «بدء أوردر جديد».
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button
+                      type="button"
+                      className="primary-btn"
+                      onClick={() => void triggerThermalPrint(true)}
+                      disabled={isPrinting}
+                      style={{ height: 36, padding: "0 14px", fontSize: 12.5, gap: 6 }}
+                    >
+                      <Icon name="printer" size={15} />
+                      <span>{isPrinting ? "جارٍ المحاولة..." : "إعادة محاولة الطباعة"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={onClose}
+                      style={{ height: 36, padding: "0 14px", fontSize: 12.5, gap: 6 }}
+                    >
+                      <Icon name="plus" size={14} />
+                      <span>بدء أوردر جديد (F2)</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {printSuccessMsg && !printerWarning && (
+                <div
+                  style={{
+                    background: "rgba(63, 185, 80, 0.12)",
+                    border: "1px solid rgba(63, 185, 80, 0.3)",
+                    color: "var(--success-text)",
                     padding: "10px 16px",
                     borderRadius: 8,
                     fontSize: 13,

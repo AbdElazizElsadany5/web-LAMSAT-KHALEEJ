@@ -39,15 +39,73 @@ export async function getAvailablePrinters(): Promise<SystemPrinterInfo[]> {
   }
 }
 
-export async function executeReceiptPrint(options?: {
-  allowDialogOnVirtualPrinter?: boolean;
-}): Promise<{
+export async function checkThermalPrinterConnection(): Promise<{
+  isConnected: boolean;
+  isElectron: boolean;
+  printerName?: string;
+  message: string;
+}> {
+  const api = getElectronBridge();
+  if (!api) {
+    return {
+      isConnected: false,
+      isElectron: false,
+      message: "يعمل في وضع الويب/المتصفح (لا يوجد تعريف مباشر لطابعة حرارية بدون نافذة الويندوز)",
+    };
+  }
+
+  try {
+    const printers = await api.getPrinters?.();
+    if (!printers || printers.length === 0) {
+      return {
+        isConnected: false,
+        isElectron: true,
+        message: "لم يتم العثور على أي طابعة متصلة بالنظام",
+      };
+    }
+
+    const settings = getThermalSettings();
+    if (settings.printerName) {
+      const match = printers.find(
+        (p) => p.name.toLowerCase() === settings.printerName.toLowerCase()
+      );
+      if (match) {
+        return { isConnected: true, isElectron: true, printerName: match.name, message: "الطابعة متصلة وجاهزة" };
+      }
+    }
+
+    // Check if any non-virtual physical printer is available
+    const physical = printers.find((p) => !isVirtualPdfPrinter(p.name));
+    if (physical) {
+      return { isConnected: true, isElectron: true, printerName: physical.name, message: "الطابعة متصلة وجاهزة" };
+    }
+
+    return {
+      isConnected: false,
+      isElectron: true,
+      message: "لا توجد طابعة إيصالات حرارية متصلة (الطابعات المتوفرة طابعات PDF افتراضية)",
+    };
+  } catch {
+    return {
+      isConnected: false,
+      isElectron: true,
+      message: "تعذر فحص حالة الطابعة",
+    };
+  }
+}
+
+export type PrintExecutionResult = {
+  isPrinterConnected: boolean;
   printedSilently: boolean;
   usedDialog: boolean;
   reason?: string;
   printer?: string;
   message: string;
-}> {
+};
+
+export async function executeReceiptPrint(options?: {
+  allowDialogOnVirtualPrinter?: boolean;
+}): Promise<PrintExecutionResult> {
   const settings = getThermalSettings();
   const api = getElectronBridge();
   const useSilent = settings.silentPrint !== false;
@@ -61,46 +119,63 @@ export async function executeReceiptPrint(options?: {
 
       if (ok) {
         return {
+          isPrinterConnected: true,
           printedSilently: true,
           usedDialog: false,
           printer,
           message: printer
-            ? `تمت الطباعة المباشرة فوراً على (${printer}) بدون نافذة الويندوز!`
+            ? `تمت الطباعة المباشرة فوراً على (${printer}) بنجاح!`
             : "تمت الطباعة المباشرة فوراً بنجاح!",
         };
       }
 
+      // Silent print failed (e.g. printer off, disconnected, or virtual PDF)
       if (!options?.allowDialogOnVirtualPrinter) {
         return {
+          isPrinterConnected: false,
           printedSilently: false,
           usedDialog: false,
-          reason,
+          reason: reason || "printer-offline",
           printer,
           message:
             reason === "virtual-printer"
-              ? `الطابعة الحالية (${printer}) طابعة PDF افتراضية ولا تدعم الطباعة المباشرة بدون نافذة — وصّل طابعة كاشير حرارية واخترها من الإدارة ← الطباعة الحرارية.`
-              : "تعذّر العثور على طابعة حرارية متصلة للطباعة المباشرة (اضغط إعادة طباعة لفتح نافذة الطابعة).",
+              ? `الطابعة المحددة (${printer}) طابعة PDF افتراضية ولا تدعم الطباعة الحرارية المباشرة.`
+              : "لا توجد طابعة إيصالات حرارية متصلة بالجهاز حالياً!",
         };
       }
     } catch {
       if (!options?.allowDialogOnVirtualPrinter) {
         return {
+          isPrinterConnected: false,
           printedSilently: false,
           usedDialog: false,
           reason: "exception",
-          message: "تعذّرت الطباعة المباشرة — اضغط إعادة طباعة لفتح نافذة الطباعة.",
+          message: "تعذر الاتصال بالطابعة الحرارية — تأكد من تشغيل الطابعة وتوصيل الكابل.",
         };
       }
     }
   }
 
-  window.print();
+  // If in browser or explicit manual fallback requested
+  if (options?.allowDialogOnVirtualPrinter) {
+    if (typeof window !== "undefined") {
+      window.print();
+    }
+    return {
+      isPrinterConnected: false,
+      printedSilently: false,
+      usedDialog: true,
+      message: api
+        ? "تم فتح نافذة الطباعة لاختيار الطابعة يدوياً."
+        : "تم فتح نافذة طباعة المتصفح.",
+    };
+  }
+
   return {
+    isPrinterConnected: false,
     printedSilently: false,
-    usedDialog: true,
-    message: api
-      ? "تم فتح نافذة طباعة الجهاز لاختيار الطابعة."
-      : "تم فتح نافذة طباعة المتصفح (للطباعة المباشرة بدون نافذة افتح برنامج سطح المكتب).",
+    usedDialog: false,
+    reason: "no-thermal-printer",
+    message: "لا توجد طابعة إيصالات حرارية متصلة بالجهاز حالياً!",
   };
 }
-
