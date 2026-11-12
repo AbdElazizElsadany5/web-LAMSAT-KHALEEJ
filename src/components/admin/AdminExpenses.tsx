@@ -34,7 +34,7 @@ export function AdminExpenses({
       time: new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
       registeredBy: "كريم عادل",
       invoicePhotoAttached: false,
-      deductedFromDrawer: paymentSource.includes("درج") ? deductDrawer : false,
+      deductedFromDrawer: paymentSource?.includes("درج") ? deductDrawer : false,
     };
 
     onAddExpense(newExp);
@@ -145,7 +145,7 @@ export function AdminExpenses({
                 </select>
               </div>
 
-              {paymentSource.includes("درج") && (
+              {paymentSource?.includes("درج") && (
                 <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#DDD", cursor: "pointer", marginTop: 4 }}>
                   <input type="checkbox" checked={deductDrawer} onChange={(e) => setDeductDrawer(e.target.checked)} />
                   <span>خصم المبلغ تلقائياً من عهدة الكاشير بالوردية الحالية</span>

@@ -13,15 +13,17 @@ export type Barber = {
   checkInTime: string;
   checkOutTime: string;
   pin: string;
-  salaryType: "ثابت" | "عمولة" | "ثابت + عمولة";
+  salaryType: "ثابت";
   basicSalary: number;
-  commissionRate: number; // e.g. 40%
   completedToday: number;
   revenueToday: number;
-  commissionEarned: number;
   rating: number;
   username?: string;
   password?: string;
+  iban?: string;
+  // Deprecated/kept optional for backward compatibility
+  commissionRate?: number;
+  commissionEarned?: number;
 };
 
 export type ServiceCategory =
@@ -90,6 +92,9 @@ export type Invoice = {
   shiftId: number;
   reprintCount: number;
   cancellationReason?: string;
+  cancelReason?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
   refundReason?: string;
 };
 
@@ -123,10 +128,15 @@ export type ExpenseCategory =
   | "إيجار"
   | "كهرباء ومياه"
   | "ضيافة وعصائر"
+  | "ضيافة وبوفيه"
   | "صيانة ومعدات"
+  | "صيانة أجهزة"
   | "أدوات حلاقة"
+  | "مستلزمات تشغيل"
   | "نظافة وتطهير"
-  | "أخرى";
+  | "فواتير وخدمات"
+  | "أخرى"
+  | string;
 
 export type ExpenseRecord = {
   id: string;
@@ -134,11 +144,15 @@ export type ExpenseRecord = {
   date: string;
   time: string;
   category: ExpenseCategory;
-  description: string;
-  paymentMethod: "نقد من الدرج" | "تحويل بنكي";
+  description?: string;
+  title?: string;
+  paymentMethod?: "نقد من الدرج" | "تحويل بنكي" | string;
+  paymentSource?: string;
   registeredBy: string;
   receiptAttachment?: string;
-  shiftDeduction: boolean;
+  invoicePhotoAttached?: boolean;
+  shiftDeduction?: boolean;
+  deductedFromDrawer?: boolean;
 };
 
 export type AttendanceRecord = {
@@ -148,8 +162,10 @@ export type AttendanceRecord = {
   date: string;
   checkIn: string;
   checkOut: string;
-  workingHours: number;
-  lateMinutes: number;
+  workingHours?: number;
+  hoursWorked?: number;
+  lateMinutes?: number;
+  minutesLate?: number;
   status: "حاضر" | "في استراحة" | "منصرف" | "لم يحضر";
   correctionNote?: string;
 };
@@ -158,16 +174,23 @@ export type ShiftRecord = {
   id: number;
   cashierName: string;
   openTime: string;
+  startTime?: string;
   closeTime?: string;
   openingCash: number;
+  initialCash?: number;
   cashSales: number;
   cardSales: number;
+  totalSales?: number;
+  invoiceCount?: number;
   instaPaySales: number;
+  instapaySales?: number;
   drawerExpenses: number;
+  cashExpenses?: number;
   deposits: number;
   withdrawals: number;
   refunds: number;
   expectedCash: number;
+  expectedDrawerCash?: number;
   actualCash?: number;
   difference?: number;
   status: "نشطة" | "مغلقة";
@@ -178,7 +201,7 @@ export type AuditLog = {
   id: string;
   user: string;
   action: string;
-  category: "بيع" | "إلغاء" | "استرجاع" | "كشف رقم عميل" | "تعديل حضور" | "تغيير سعر" | "سلفة أو خصم" | "إغلاق وردية" | "نسخ احتياطي";
+  category: "بيع" | "إلغاء" | "استرجاع" | "كشف رقم عميل" | "تعديل حضور" | "تغيير سعر" | "سلفة أو خصم" | "إغلاق وردية" | "نسخ احتياطي" | string;
   timestamp: string;
   previousValue: string;
   newValue: string;
@@ -193,12 +216,30 @@ export type InventoryProduct = {
   category: string;
   stock: number;
   minThreshold: number;
+  minAlertStock?: number;
   unitCost: number;
+  purchasePrice?: number;
   sellingPrice?: number;
   supplier: string;
-  lastPurchaseDate: string;
+  lastPurchaseDate?: string;
   status: "متوفر" | "مخزون منخفض" | "حرج";
+  unit?: string;
 };
 
 export type PrintMode = "services_only" | "services_and_catalog" | "services_with_catalog" | "catalog_only";
+
+export type AdvanceRecord = {
+  id: string;
+  barberId: string;
+  barberName: string;
+  amount: number;
+  reason: string;
+  date: string;
+  time: string;
+  registeredBy: string;
+  registeredByRole: "cashier" | "admin";
+  status: "نشط" | "مسدد" | "جزئي";
+  paidAmount?: number;
+  notes?: string;
+};
 

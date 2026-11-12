@@ -212,7 +212,7 @@ export function AdminShifts({
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
                 <span style={{ color: "#AAA" }}>النقدية المتوقعة بالدرج:</span>
-                <strong style={{ color: "#BBB", fontFamily: "Inter" }}>{activeShift.expectedDrawerCash.toLocaleString()} ج.م</strong>
+                <strong style={{ color: "#BBB", fontFamily: "Inter" }}>{(activeShift.expectedDrawerCash ?? activeShift.expectedCash).toLocaleString()} ج.م</strong>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px dashed #333", paddingTop: 8, fontSize: 14, fontWeight: 800 }}>
                 <span>الفارق النهائي:</span>

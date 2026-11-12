@@ -115,7 +115,7 @@ export function ServicesPage({
         <div className="panel-head" style={{ marginBottom: 0 }}>
           <div>
             <h2>دليل الخدمات والباقات والأسعار</h2>
-            <p>إدارة قوائم الحلاقة، الباقات الملكية، مدد التنفيذ، ونسب العمولات المحفوظة</p>
+            <p>إدارة قوائم الحلاقة، الباقات الملكية، مدد التنفيذ، والأسعار المعتمدة</p>
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>
@@ -323,13 +323,6 @@ export function ServicesPage({
                     </div>
                   </div>
 
-                  <div>
-                    <span style={{ fontSize: 11, color: "#777" }}>عمولة الحلاق</span>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#56D364", fontFamily: "Inter" }}>
-                      {srv.commissionRate}%
-                    </div>
-                  </div>
-
                   <div style={{ textAlign: "left" }}>
                     <span style={{ fontSize: 11, color: "#777" }}>السعر النهائي</span>
                     <div style={{ fontSize: 22, fontWeight: 900, color: "#F5C242", fontFamily: "Inter" }}>
@@ -378,7 +371,6 @@ export function ServicesPage({
                 <th>التصنيف</th>
                 <th>السعر</th>
                 <th>المدة</th>
-                <th>عمولة الحلاق</th>
                 <th>الحالة</th>
                 <th>الإجراءات</th>
               </tr>
@@ -401,9 +393,6 @@ export function ServicesPage({
                     {srv.price} ج.م
                   </td>
                   <td style={{ fontFamily: "Inter" }}>{srv.duration} دقيقة</td>
-                  <td style={{ fontFamily: "Inter", color: "#56D364", fontWeight: 700 }}>
-                    {srv.commissionRate}%
-                  </td>
                   <td>
                     <button
                       type="button"
@@ -512,17 +501,6 @@ export function ServicesPage({
                       value={formDuration}
                       onChange={(e) => setFormDuration(Number(e.target.value))}
                       placeholder="30"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">نسبة عمولة الحلاق (%):</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={formCommission}
-                      onChange={(e) => setFormCommission(Number(e.target.value))}
-                      placeholder="35"
                     />
                   </div>
                 </div>

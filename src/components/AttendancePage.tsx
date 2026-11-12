@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Barber, AttendanceRecord, UserRole } from "../types";
+import { Barber, AttendanceRecord, UserRole, AdvanceRecord } from "../types";
 import { Icon } from "./Icons";
 
 export function AttendancePage({
   barbers,
   attendanceRecords,
+  advances = [],
   userRole,
   activeEmployeeName,
   onUpdateBarberStatus,
@@ -12,12 +13,14 @@ export function AttendancePage({
 }: {
   barbers: Barber[];
   attendanceRecords: AttendanceRecord[];
+  advances?: AdvanceRecord[];
   userRole: UserRole;
   activeEmployeeName?: string;
   onUpdateBarberStatus: (barberId: string, newStatus: Barber["status"], timeStr: string) => void;
   onAdminCorrectAttendance: (recordId: string, newCheckIn: string, newCheckOut: string, reason: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"cards" | "table">("cards");
+  const [employeeTab, setEmployeeTab] = useState<"clockin" | "attendance_history" | "advances" | "salary">("clockin");
   const [statusFilter, setStatusFilter] = useState<string>("الكل");
   const [toastMsg, setToastMsg] = useState("");
 
@@ -46,6 +49,29 @@ export function AttendancePage({
   const leftCount = barbers.filter((b) => b.status === "منصرف").length;
   const absentCount = barbers.filter((b) => b.status === "غير حاضر").length;
   const totalBarbers = barbers.length;
+
+  // Matched Employee Data for Employee-specific Dashboard
+  const currentEmployee = barbers.find((b) => {
+    if (!activeEmployeeName) return false;
+    const cleanActive = activeEmployeeName.toLowerCase();
+    const bFirst = b.name.split(" ")[0].toLowerCase();
+    return (
+      b.name.includes(activeEmployeeName) ||
+      cleanActive.includes(bFirst) ||
+      (b.username && cleanActive.includes(b.username.toLowerCase()))
+    );
+  }) || barbers[0];
+
+  const empAttendance = attendanceRecords.filter(
+    (r) => r.barberId === currentEmployee?.id || r.barberName === currentEmployee?.name
+  );
+  const empAdvances = (advances || []).filter(
+    (a) => a.barberId === currentEmployee?.id || a.barberName === currentEmployee?.name
+  );
+  const empTotalAdvances = empAdvances.reduce((sum, a) => sum + a.amount, 0);
+  const empPaidAdvances = empAdvances.reduce((sum, a) => sum + (a.paidAmount || 0), 0);
+  const empRemainingAdvances = empTotalAdvances - empPaidAdvances;
+  const empNetSalary = (currentEmployee?.basicSalary || 0) - empRemainingAdvances;
 
   const filteredBarbers = barbers.filter((b) => {
     if (userRole === "employee" && activeEmployeeName) {
@@ -135,77 +161,174 @@ export function AttendancePage({
   return (
     <div>
       {/* Top Header KPIs */}
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div>
-            <div className="kpi-label">الحاضرون على الكراسي</div>
-            <div className="kpi-value gold">{presentCount} <small style={{ fontSize: 14 }}>حلاق</small></div>
-            <div className="kpi-hint positive">
-              <Icon name="check" size={13} />
-              <span>جاهزون لخدمة العملاء</span>
+      {userRole === "employee" ? (
+        <div className="kpi-grid">
+          <div className="kpi-card">
+            <div>
+              <div className="kpi-label">حالة الدوام الحالية</div>
+              <div className="kpi-value gold">{currentEmployee.status}</div>
+              <div className="kpi-hint positive">
+                <Icon name="clock" size={13} />
+                <span>حضور: {currentEmployee.checkInTime}</span>
+              </div>
+            </div>
+            <div className="kpi-icon-wrap">
+              <Icon name="scissors" size={20} />
             </div>
           </div>
-          <div className="kpi-icon-wrap">
-            <Icon name="scissors" size={20} />
-          </div>
-        </div>
 
-        <div className="kpi-card">
-          <div>
-            <div className="kpi-label">في استراحة حالياً</div>
-            <div className="kpi-value">{breakCount} <small style={{ fontSize: 14 }}>حلاق</small></div>
-            <div className="kpi-hint" style={{ color: "#FF9F1C" }}>
-              <Icon name="clock" size={13} />
-              <span>فترة راحة مصرحة</span>
+          <div className="kpi-card">
+            <div>
+              <div className="kpi-label">الراتب الأساسي الشهري</div>
+              <div className="kpi-value">
+                {currentEmployee.basicSalary.toLocaleString("ar-EG")} <small style={{ fontSize: 13 }}>ج.م</small>
+              </div>
+              <div className="kpi-hint">
+                <span>نظام راتب ثابت (بدون عمولات)</span>
+              </div>
+            </div>
+            <div className="kpi-icon-wrap" style={{ color: "#D4AF37", borderColor: "#554410" }}>
+              <Icon name="wallet" size={20} />
             </div>
           </div>
-          <div className="kpi-icon-wrap" style={{ color: "#FF9F1C", borderColor: "#553810" }}>
-            <Icon name="pause" size={20} />
-          </div>
-        </div>
 
-        <div className="kpi-card">
-          <div>
-            <div className="kpi-label">تم انصرافهم اليوم</div>
-            <div className="kpi-value">{leftCount}</div>
-            <div className="kpi-hint">
-              <span>انتهت ورديتهم</span>
+          <div className="kpi-card">
+            <div>
+              <div className="kpi-label">إجمالي السلف المستحقة</div>
+              <div className="kpi-value" style={{ color: empRemainingAdvances > 0 ? "#FF8E92" : "#56D364" }}>
+                {empRemainingAdvances.toLocaleString("ar-EG")} <small style={{ fontSize: 13 }}>ج.م</small>
+              </div>
+              <div className="kpi-hint">
+                <span>{empAdvances.length} سلف مسجلة</span>
+              </div>
+            </div>
+            <div className="kpi-icon-wrap" style={{ color: "#E5484D", borderColor: "#551A1A" }}>
+              <Icon name="dollarSign" size={20} />
             </div>
           </div>
-          <div className="kpi-icon-wrap" style={{ color: "#AAA", borderColor: "#333" }}>
-            <Icon name="logout" size={20} />
-          </div>
-        </div>
 
-        <div className="kpi-card">
-          <div>
-            <div className="kpi-label">نسبة الالتزام بالدوام</div>
-            <div className="kpi-value positive" style={{ color: "#56D364" }}>
-              {Math.round(((presentCount + breakCount) / Math.max(1, totalBarbers)) * 100)}%
+          <div className="kpi-card">
+            <div>
+              <div className="kpi-label">صافي المستحق التقديري</div>
+              <div className="kpi-value positive" style={{ color: "#56D364" }}>
+                {Math.max(0, empNetSalary).toLocaleString("ar-EG")} <small style={{ fontSize: 13 }}>ج.م</small>
+              </div>
+              <div className="kpi-hint positive">
+                <span>الراتب الأساسي مخصوماً منه السلف</span>
+              </div>
             </div>
-            <div className="kpi-hint positive">
-              <span>{presentCount + breakCount} من أصل {totalBarbers} موظفين</span>
+            <div className="kpi-icon-wrap" style={{ color: "#3FB950", borderColor: "#1A4522" }}>
+              <Icon name="chart" size={20} />
             </div>
-          </div>
-          <div className="kpi-icon-wrap" style={{ color: "#3FB950", borderColor: "#1A4522" }}>
-            <Icon name="chart" size={20} />
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="kpi-grid">
+          <div className="kpi-card">
+            <div>
+              <div className="kpi-label">الحاضرون على الكراسي</div>
+              <div className="kpi-value gold">{presentCount} <small style={{ fontSize: 14 }}>حلاق</small></div>
+              <div className="kpi-hint positive">
+                <Icon name="check" size={13} />
+                <span>جاهزون لخدمة العملاء</span>
+              </div>
+            </div>
+            <div className="kpi-icon-wrap">
+              <Icon name="scissors" size={20} />
+            </div>
+          </div>
+
+          <div className="kpi-card">
+            <div>
+              <div className="kpi-label">في استراحة حالياً</div>
+              <div className="kpi-value">{breakCount} <small style={{ fontSize: 14 }}>حلاق</small></div>
+              <div className="kpi-hint" style={{ color: "#FF9F1C" }}>
+                <Icon name="clock" size={13} />
+                <span>فترة راحة مصرحة</span>
+              </div>
+            </div>
+            <div className="kpi-icon-wrap" style={{ color: "#FF9F1C", borderColor: "#553810" }}>
+              <Icon name="pause" size={20} />
+            </div>
+          </div>
+
+          <div className="kpi-card">
+            <div>
+              <div className="kpi-label">تم انصرافهم اليوم</div>
+              <div className="kpi-value">{leftCount}</div>
+              <div className="kpi-hint">
+                <span>انتهت ورديتهم</span>
+              </div>
+            </div>
+            <div className="kpi-icon-wrap" style={{ color: "#AAA", borderColor: "#333" }}>
+              <Icon name="logout" size={20} />
+            </div>
+          </div>
+
+          <div className="kpi-card">
+            <div>
+              <div className="kpi-label">نسبة الالتزام بالدوام</div>
+              <div className="kpi-value positive" style={{ color: "#56D364" }}>
+                {Math.round(((presentCount + breakCount) / Math.max(1, totalBarbers)) * 100)}%
+              </div>
+              <div className="kpi-hint positive">
+                <span>{presentCount + breakCount} من أصل {totalBarbers} موظفين</span>
+              </div>
+            </div>
+            <div className="kpi-icon-wrap" style={{ color: "#3FB950", borderColor: "#1A4522" }}>
+              <Icon name="chart" size={20} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Panel */}
       <section className="panel">
         <div className="panel-head">
           <div>
-            <h2>{userRole === "employee" ? "سجل حضوري الشخصي" : "إدارة حضور وانصراف فريق العمل"}</h2>
+            <h2>{userRole === "employee" ? `صفحة الموظف: ${currentEmployee.name}` : "إدارة حضور وانصراف فريق العمل"}</h2>
             <p>
               {userRole === "employee"
-                ? "سجّل حضورك وانصرافك بالرمز السري واطلع على إحصائيات دوامك"
+                ? "متابعة سجل أيام الحضور، أوقات العمل، السلف والخصومات، وكشف الراتب الشهري"
                 : "متابعة لحظية لحالات الحلاقين، أوقات الحضور والانصراف، وجداول العمل الشهرية"}
             </p>
           </div>
 
-          {userRole !== "employee" && (
+          {userRole === "employee" ? (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[
+                { id: "clockin" as const, label: "تسجيل الدوام (PIN)" },
+                { id: "attendance_history" as const, label: `سجل أيام الحضور (${empAttendance.length})` },
+                { id: "advances" as const, label: `السلف والخصومات (${empAdvances.length})` },
+                { id: "salary" as const, label: "كشف الراتب والمستحقات" },
+              ].map((tab) => {
+                const isActive = employeeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setEmployeeTab(tab.id)}
+                    style={{
+                      height: 36,
+                      padding: "0 14px",
+                      borderRadius: 8,
+                      background: isActive
+                        ? "linear-gradient(135deg, rgba(212,175,55,0.25) 0%, rgba(212,175,55,0.1) 100%)"
+                        : "#161616",
+                      border: `1px solid ${isActive ? "#D4AF37" : "#28241B"}`,
+                      color: isActive ? "#F5C242" : "#AAA",
+                      fontWeight: isActive ? 800 : 600,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
             <div style={{ display: "flex", gap: 10 }}>
               <div
                 style={{
@@ -256,11 +379,412 @@ export function AttendancePage({
           )}
         </div>
 
-        {/* Tab 1: Cards View */}
-        {activeTab === "cards" && (
+        {/* EMPLOYEE VIEW - TAB 1: Clock In Card */}
+        {userRole === "employee" && employeeTab === "clockin" && (
+          <div style={{ maxWidth: 580, margin: "20px auto" }}>
+            <div
+              style={{
+                background: "#161616",
+                border: "1.5px solid #2B2519",
+                borderRadius: 16,
+                padding: 28,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <img
+                    src={currentEmployee.avatar}
+                    alt={currentEmployee.name}
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 14,
+                      objectFit: "cover",
+                      border: "2px solid #D4AF37",
+                    }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: "#FFF" }}>{currentEmployee.name}</div>
+                    <div style={{ fontSize: 13, color: "#8E8E8E", marginTop: 2 }}>{currentEmployee.title}</div>
+                    <div style={{ fontSize: 12, color: "#D4AF37", marginTop: 4 }}>
+                      ★ {currentEmployee.rating} • هاتف: {currentEmployee.phone}
+                    </div>
+                  </div>
+                </div>
+
+                <span
+                  className={`badge ${
+                    currentEmployee.status === "متاح" || currentEmployee.status === "مشغول"
+                      ? "success"
+                      : currentEmployee.status === "في استراحة"
+                        ? "warning"
+                        : "neutral"
+                  }`}
+                  style={{ fontSize: 14, padding: "6px 14px" }}
+                >
+                  <i />
+                  {currentEmployee.status}
+                </span>
+              </div>
+
+              {/* Attendance Timestamps */}
+              <div
+                style={{
+                  background: "#111111",
+                  border: "1px solid #221F17",
+                  borderRadius: 12,
+                  padding: "16px 20px",
+                  marginBottom: 24,
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 16,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, color: "#888" }}>وقت تسجيل الحضور:</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "#56D364", marginTop: 4 }}>
+                    {currentEmployee.checkInTime}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#888" }}>وقت الانصراف اليوم:</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "#FFAE42", marginTop: 4 }}>
+                    {currentEmployee.checkOutTime}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons with PIN */}
+              <div style={{ display: "flex", gap: 10 }}>
+                {currentEmployee.status === "غير حاضر" || currentEmployee.status === "منصرف" ? (
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    style={{ width: "100%", height: 46, fontSize: 15 }}
+                    onClick={() => handleOpenPin(currentEmployee, "checkin")}
+                  >
+                    <Icon name="check" size={17} />
+                    <span>تسجيل حضور وبدء الوردية (PIN)</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      style={{ flex: 1, height: 46, fontSize: 14 }}
+                      onClick={() => handleOpenPin(currentEmployee, "break")}
+                    >
+                      <Icon name="pause" size={16} />
+                      <span>{currentEmployee.status === "في استراحة" ? "إنهاء الاستراحة والعودة" : "بدء استراحة"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="danger-ghost"
+                      style={{ flex: 1, height: 46, fontSize: 14 }}
+                      onClick={() => handleOpenPin(currentEmployee, "checkout")}
+                    >
+                      <Icon name="logout" size={16} />
+                      <span>تسجيل انصراف الوردية</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* EMPLOYEE VIEW - TAB 2: Attendance History */}
+        {userRole === "employee" && employeeTab === "attendance_history" && (
+          <div>
+            <div style={{ marginBottom: 14, fontSize: 13, color: "#888" }}>
+              سجل الحضور والانصراف الموثق الخاص بك لشهر فبراير 2026:
+            </div>
+            {empAttendance.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "50px 0", color: "#666" }}>
+                لا توجد سجلات حضور مسجلة لهذا الشهر بعد.
+              </div>
+            ) : (
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>التاريخ</th>
+                      <th>وقت الحضور</th>
+                      <th>وقت الانصراف</th>
+                      <th>ساعات العمل</th>
+                      <th>دقائق التأخير</th>
+                      <th>الحالة</th>
+                      <th>ملاحظات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {empAttendance.map((rec) => (
+                      <tr key={rec.id}>
+                        <td style={{ fontWeight: 700, color: "#FFF" }}>{rec.date}</td>
+                        <td style={{ fontFamily: "Inter", color: "#56D364", fontWeight: 700 }}>{rec.checkIn}</td>
+                        <td style={{ fontFamily: "Inter", color: "#FFAE42", fontWeight: 700 }}>{rec.checkOut}</td>
+                        <td style={{ fontFamily: "Inter", fontWeight: 700 }}>{rec.workingHours} س</td>
+                        <td style={{ fontFamily: "Inter", color: (rec.lateMinutes || 0) > 0 ? "#FF8E92" : "#888" }}>
+                          {(rec.lateMinutes || 0) > 0 ? `${rec.lateMinutes} دقيقة` : "0 (ملتزم)"}
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              rec.status === "حاضر" ? "success" : rec.status === "في استراحة" ? "warning" : "neutral"
+                            }`}
+                          >
+                            <i />
+                            {rec.status}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 12, color: "#888" }}>
+                          {rec.correctionNote || "دوام اعتيادي"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* EMPLOYEE VIEW - TAB 3: Advances & Loans */}
+        {userRole === "employee" && employeeTab === "advances" && (
+          <div>
+            {/* KPI Summary for Advances */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 12,
+                marginBottom: 20,
+              }}
+            >
+              <div style={{ background: "#161616", border: "1px solid #2B2519", borderRadius: 12, padding: "14px 18px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>إجمالي مبالغ السلف</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#FF8E92" }}>
+                  {empTotalAdvances.toLocaleString("ar-EG")} ج.م
+                </div>
+              </div>
+
+              <div style={{ background: "#161616", border: "1px solid #2B2519", borderRadius: 12, padding: "14px 18px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>المُسدَّد منها</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#56D364" }}>
+                  {empPaidAdvances.toLocaleString("ar-EG")} ج.م
+                </div>
+              </div>
+
+              <div style={{ background: "#161616", border: "1px solid #2B2519", borderRadius: 12, padding: "14px 18px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>المتبقي للخصم من الراتب</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#F5C242" }}>
+                  {empRemainingAdvances.toLocaleString("ar-EG")} ج.م
+                </div>
+              </div>
+            </div>
+
+            {/* Advances Table */}
+            {empAdvances.length === 0 ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "50px 0",
+                  color: "#666",
+                  background: "#131313",
+                  borderRadius: 12,
+                  border: "1px dashed #28241B",
+                }}
+              >
+                <Icon name="check" size={32} style={{ color: "#56D364" } as any} />
+                <p style={{ marginTop: 10, color: "#AAA" }}>لا توجد أي سلف أو خصومات مسجلة عليك حالياً. حسابك نظيف تماماً.</p>
+              </div>
+            ) : (
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>رقم السلفة</th>
+                      <th>المبلغ</th>
+                      <th>السبب</th>
+                      <th>تاريخ ووقت الصرف</th>
+                      <th>سجلت بواسطة</th>
+                      <th>الحالة</th>
+                      <th>ملاحظات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {empAdvances.map((adv) => (
+                      <tr key={adv.id}>
+                        <td style={{ fontFamily: "Inter", fontWeight: 700, color: "#F5C242" }}>{adv.id}</td>
+                        <td style={{ fontWeight: 800, color: "#FF8E92", fontSize: 15 }}>
+                          {adv.amount.toLocaleString("ar-EG")} ج.م
+                        </td>
+                        <td style={{ fontWeight: 600, color: "#DDD" }}>{adv.reason}</td>
+                        <td style={{ color: "#AAA", fontSize: 12 }}>
+                          {adv.date} • {adv.time}
+                        </td>
+                        <td style={{ fontSize: 12 }}>
+                          <span style={{ color: adv.registeredByRole === "admin" ? "#D4AF37" : "#6CBBFF" }}>
+                            {adv.registeredBy}
+                          </span>
+                          <span style={{ color: "#666", marginRight: 4 }}>
+                            ({adv.registeredByRole === "admin" ? "أدمن" : "كاشير"})
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              background: adv.status === "مسدد" ? "rgba(63,185,80,0.15)" : adv.status === "جزئي" ? "rgba(245,194,66,0.15)" : "rgba(229,72,77,0.15)",
+                              color: adv.status === "مسدد" ? "#56D364" : adv.status === "جزئي" ? "#F5C242" : "#FF8E92",
+                              border: `1px solid ${adv.status === "مسدد" ? "#3FB950" : adv.status === "جزئي" ? "#D4AF37" : "#E5484D"}`,
+                              borderRadius: 20,
+                              padding: "2px 10px",
+                              fontSize: 12,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {adv.status}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 12, color: "#888" }}>{adv.notes || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div
+              style={{
+                marginTop: 18,
+                padding: "12px 16px",
+                borderRadius: 10,
+                background: "#141414",
+                border: "1px solid #231E15",
+                fontSize: 12,
+                color: "#888",
+                lineHeight: 1.6,
+              }}
+            >
+              ℹ️ <strong>ملاحظة هامة:</strong> السلف المسجلة عبر الكاشير أو الإدارة يتم خصمها تلقائياً عند تسليم كشف الراتب الشهري، ويمكن سدادها نقداً عبر الإدارة لإعادتها إلى الخزينة وتسجيلها كمسددة.
+            </div>
+          </div>
+        )}
+
+        {/* EMPLOYEE VIEW - TAB 4: Monthly Salary & Deductions */}
+        {userRole === "employee" && employeeTab === "salary" && (
+          <div>
+            <div
+              style={{
+                background: "#161616",
+                border: "1.5px solid #D4AF37",
+                borderRadius: 16,
+                padding: 28,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+                maxWidth: 680,
+                margin: "0 auto",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ margin: 0, color: "#FFF", fontSize: 18, fontWeight: 900 }}>
+                    كشف الحساب والراتب الشهري
+                  </h3>
+                  <span style={{ fontSize: 12, color: "#888" }}>شهر فبراير 2026 • الموظف: {currentEmployee.name}</span>
+                </div>
+                <span
+                  style={{
+                    background: "rgba(212,175,55,0.15)",
+                    border: "1px solid #D4AF37",
+                    color: "#F5C242",
+                    borderRadius: 8,
+                    padding: "4px 12px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
+                  نظام الراتب: ثابت فقط
+                </span>
+              </div>
+
+              {/* Breakdown Grid (Pure Fixed Salary, Zero Commissions) */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: "14px 18px",
+                    background: "#111",
+                    borderRadius: 10,
+                    border: "1px solid #221F17",
+                  }}
+                >
+                  <span style={{ color: "#AAA", fontSize: 14 }}>الراتب الشهري الأساسي الثابت:</span>
+                  <strong style={{ color: "#FFF", fontSize: 17, fontFamily: "Inter" }}>
+                    {currentEmployee.basicSalary.toLocaleString("ar-EG")} ج.م
+                  </strong>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: "14px 18px",
+                    background: "#111",
+                    borderRadius: 10,
+                    border: "1px solid #221F17",
+                  }}
+                >
+                  <div>
+                    <span style={{ color: "#AAA", fontSize: 14 }}>
+                      إجمالي الخصومات والسلف المستحقة:
+                    </span>
+                    <span style={{ fontSize: 11, color: "#888", display: "block", marginTop: 2 }}>
+                      ({empAdvances.length} سلف مسجلة عبر الكاشير / الإدارة)
+                    </span>
+                  </div>
+                  <strong style={{ color: "#FF8E92", fontSize: 17, fontFamily: "Inter" }}>
+                    -{empRemainingAdvances.toLocaleString("ar-EG")} ج.م
+                  </strong>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: "18px 22px",
+                    background: "linear-gradient(135deg, rgba(212,175,55,0.2) 0%, rgba(212,175,55,0.06) 100%)",
+                    border: "1.5px solid #D4AF37",
+                    borderRadius: 12,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, color: "#C5B392", fontWeight: 800 }}>
+                      صافي الراتب المستحق التقديري للصرف:
+                    </div>
+                    <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+                      (الراتب الأساسي الثابت - إجمالي السلف المتبقية)
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: "#F5C242", fontFamily: "Inter, Cairo" }}>
+                    {Math.max(0, empNetSalary).toLocaleString("ar-EG")}{" "}
+                    <small style={{ fontSize: 16, fontFamily: "Cairo" }}>ج.م</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ADMIN & CASHIER VIEW - Tab 1: Cards View */}
+        {userRole !== "employee" && activeTab === "cards" && (
           <div>
             {/* Filter Pills (Admin only) */}
-            {userRole !== "employee" && (
+            {userRole === "admin" && (
               <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
                 {["الكل", "حاضر", "في استراحة", "منصرف", "غير حاضر"].map((st) => (
                   <button
@@ -437,8 +961,8 @@ export function AttendancePage({
                       <td style={{ fontFamily: "Inter", color: "#56D364" }}>{rec.checkIn}</td>
                       <td style={{ fontFamily: "Inter", color: "#FFAE42" }}>{rec.checkOut}</td>
                       <td style={{ fontFamily: "Inter", fontWeight: 700 }}>{rec.workingHours} س</td>
-                      <td style={{ fontFamily: "Inter", color: rec.lateMinutes > 0 ? "#FF8E92" : "#888" }}>
-                        {rec.lateMinutes > 0 ? `${rec.lateMinutes} دقيقة` : "0 (ملتزم)"}
+                      <td style={{ fontFamily: "Inter", color: (rec.lateMinutes || 0) > 0 ? "#FF8E92" : "#888" }}>
+                        {(rec.lateMinutes || 0) > 0 ? `${rec.lateMinutes} دقيقة` : "0 (ملتزم)"}
                       </td>
                       <td>
                         <span

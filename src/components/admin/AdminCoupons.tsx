@@ -84,7 +84,7 @@ export function AdminCoupons({
           </thead>
           <tbody>
             {coupons.map((c) => {
-              const usagePct = Math.round((c.usageCount / c.usageLimit) * 100);
+              const usagePct = c.usageLimit ? Math.round(((c.usageCount || 0) / c.usageLimit) * 100) : 0;
               return (
                 <tr key={c.id}>
                   <td>

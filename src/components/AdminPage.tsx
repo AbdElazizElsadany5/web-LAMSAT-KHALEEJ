@@ -8,6 +8,8 @@ import {
   AuditLog,
   InventoryProduct,
   ServiceItem,
+  AdvanceRecord,
+  AttendanceRecord,
 } from "../types";
 import { Icon, IconName } from "./Icons";
 
@@ -18,6 +20,7 @@ import { AdminEmployees } from "./admin/AdminEmployees";
 import { AdminUsers } from "./admin/AdminUsers";
 import { AdminExpenses } from "./admin/AdminExpenses";
 import { AdminPayroll } from "./admin/AdminPayroll";
+import { AdminAdvances } from "./admin/AdminAdvances";
 import { AdminReports } from "./admin/AdminReports";
 import { AdminShifts } from "./admin/AdminShifts";
 import { AdminThermal } from "./admin/AdminThermal";
@@ -34,11 +37,16 @@ export function AdminPage({
   auditLogs,
   inventory,
   services,
+  advances = [],
+  attendanceRecords = [],
   onSaveCoupon,
   onSaveEmployee,
   onAddExpense,
   onCloseShift,
   onSaveSettings,
+  onAddAdvance,
+  onEditAdvance,
+  onDeleteAdvance,
 }: {
   invoices: Invoice[];
   barbers: Barber[];
@@ -48,11 +56,16 @@ export function AdminPage({
   auditLogs: AuditLog[];
   inventory: InventoryProduct[];
   services: ServiceItem[];
+  advances?: AdvanceRecord[];
+  attendanceRecords?: AttendanceRecord[];
   onSaveCoupon: (coupon: Coupon) => void;
   onSaveEmployee: (employee: Barber) => void;
   onAddExpense: (expense: ExpenseRecord) => void;
   onCloseShift: (shiftId: number, actualCash: number, notes: string) => void;
   onSaveSettings: (settings: Record<string, string>) => void;
+  onAddAdvance?: (advance: AdvanceRecord) => void;
+  onEditAdvance?: (advance: AdvanceRecord) => void;
+  onDeleteAdvance?: (id: string) => void;
 }) {
   const [activeSection, setActiveSection] = useState<string>("نظرة عامة");
   const [toastMsg, setToastMsg] = useState("");
@@ -68,7 +81,8 @@ export function AdminPage({
     { id: "الموظفون", label: "الموظفون", icon: "users" },
     { id: "المستخدمون", label: "المستخدمون", icon: "key" },
     { id: "المصروفات", label: "المصروفات", icon: "wallet" },
-    { id: "الرواتب والعمولات", label: "الرواتب والعمولات", icon: "dollarSign" },
+    { id: "السلف والخصومات", label: "السلف والخصومات", icon: "dollarSign" },
+    { id: "الرواتب والمستحقات", label: "الرواتب والمستحقات", icon: "users" },
     { id: "التقارير", label: "التقارير", icon: "chart" },
     { id: "الورديات والخزينة", label: "الورديات والخزينة", icon: "receipt" },
     { id: "الطباعة الحرارية", label: "الطباعة الحرارية", icon: "printer" },
@@ -145,6 +159,8 @@ export function AdminPage({
       {activeSection === "الموظفون" && (
         <AdminEmployees
           barbers={barbers}
+          attendanceRecords={attendanceRecords}
+          advances={advances}
           onSaveEmployee={onSaveEmployee}
           onShowToast={showToast}
         />
@@ -162,9 +178,21 @@ export function AdminPage({
         />
       )}
 
-      {activeSection === "الرواتب والعمولات" && (
+      {activeSection === "السلف والخصومات" && (
+        <AdminAdvances
+          advances={advances}
+          barbers={barbers}
+          onAdd={onAddAdvance || (() => {})}
+          onEdit={onEditAdvance || (() => {})}
+          onDelete={onDeleteAdvance || (() => {})}
+          currentUser="المدير العام"
+        />
+      )}
+
+      {activeSection === "الرواتب والمستحقات" && (
         <AdminPayroll
           barbers={barbers}
+          advances={advances}
           onShowToast={showToast}
         />
       )}

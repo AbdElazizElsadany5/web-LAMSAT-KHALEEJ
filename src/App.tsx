@@ -11,6 +11,7 @@ import {
   AuditLog,
   InventoryProduct,
   CartItem,
+  AdvanceRecord,
 } from "./types";
 import {
   initialBarbers,
@@ -22,6 +23,7 @@ import {
   initialAuditLogs,
   initialInventory,
   initialAttendance,
+  initialAdvances,
 } from "./data/initialData";
 import { Icon, IconName } from "./components/Icons";
 import { DesktopTitlebar } from "./components/DesktopTitlebar";
@@ -91,6 +93,9 @@ export default function App() {
   const [attendanceRecords, setAttendanceRecords] = useState(() =>
     secureStorage.getItem("pos_attendance_data", initialAttendance)
   );
+  const [advances, setAdvances] = useState<AdvanceRecord[]>(() =>
+    secureStorage.getItem<AdvanceRecord[]>("pos_advances_data", initialAdvances)
+  );
 
   // Background Auto-Save with Secure Encryption
   useEffect(() => {
@@ -124,6 +129,10 @@ export default function App() {
   useEffect(() => {
     secureStorage.setItem("pos_attendance_data", attendanceRecords);
   }, [attendanceRecords]);
+
+  useEffect(() => {
+    secureStorage.setItem("pos_advances_data", advances);
+  }, [advances]);
 
   // Checkout Modal State
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
@@ -205,7 +214,7 @@ export default function App() {
       return [{ id: "attendance" as Page, label: "صفحة الموظف", icon: "clock" as IconName }];
     }
     if (currentUserRole === "cashier") {
-      return allNav.filter((n) => n.id === "pos" || n.id === "attendance" || n.id === "invoices");
+      return allNav.filter((n) => n.id === "pos" || n.id === "attendance" || n.id === "invoices" || n.id === "inventory");
     }
     return allNav;
   }, [currentUserRole]);
@@ -311,6 +320,48 @@ export default function App() {
       reason,
       "حساس",
     );
+  };
+
+  // Advances & Loans Handlers
+  const handleAddAdvance = (newAdvance: AdvanceRecord) => {
+    setAdvances((prev) => [newAdvance, ...prev]);
+    addAuditLog(
+      `تسجيل سلفة جديدة للموظف ${newAdvance.barberName}`,
+      "سلفة أو خصم",
+      "—",
+      `${newAdvance.amount} ج.م (${newAdvance.reason})`,
+      `المسجل: ${newAdvance.registeredBy} (${newAdvance.registeredByRole})`,
+      "حساس"
+    );
+  };
+
+  const handleEditAdvance = (updatedAdvance: AdvanceRecord) => {
+    setAdvances((prev) =>
+      prev.map((a) => (a.id === updatedAdvance.id ? updatedAdvance : a))
+    );
+    addAuditLog(
+      `تعديل سلفة للموظف ${updatedAdvance.barberName} (#${updatedAdvance.id})`,
+      "سلفة أو خصم",
+      "قيمة سابقة",
+      `${updatedAdvance.amount} ج.م (الحالة: ${updatedAdvance.status})`,
+      updatedAdvance.notes || "تعديل إداري",
+      "حساس"
+    );
+  };
+
+  const handleDeleteAdvance = (id: string) => {
+    const target = advances.find((a) => a.id === id);
+    setAdvances((prev) => prev.filter((a) => a.id !== id));
+    if (target) {
+      addAuditLog(
+        `حذف سلفة للموظف ${target.barberName} (#${id})`,
+        "سلفة أو خصم",
+        `${target.amount} ج.م`,
+        "محذوفة نهائياً",
+        "حذف بواسطة المدير العام",
+        "حرج"
+      );
+    }
   };
 
   // Cancel Invoice
@@ -634,6 +685,7 @@ export default function App() {
             onCheckout={handleOpenCheckout}
             activeCashier={currentUsername}
             onOpenQueue={() => setShowQueueModal(true)}
+            onAddAdvance={handleAddAdvance}
           />
         )}
 
@@ -641,6 +693,7 @@ export default function App() {
           <AttendancePage
             barbers={barbers}
             attendanceRecords={attendanceRecords}
+            advances={advances}
             userRole={currentUserRole}
             activeEmployeeName={currentUsername}
             onUpdateBarberStatus={handleUpdateBarberStatus}
@@ -667,7 +720,7 @@ export default function App() {
           />
         )}
 
-        {currentPage === "inventory" && currentUserRole === "admin" && (
+        {currentPage === "inventory" && (currentUserRole === "admin" || currentUserRole === "cashier") && (
           <InventoryPage
             products={inventory}
             barbers={barbers}
@@ -687,6 +740,11 @@ export default function App() {
             auditLogs={auditLogs}
             inventory={inventory}
             services={services}
+            advances={advances}
+            attendanceRecords={attendanceRecords}
+            onAddAdvance={handleAddAdvance}
+            onEditAdvance={handleEditAdvance}
+            onDeleteAdvance={handleDeleteAdvance}
             onSaveCoupon={(c) => {
               setCoupons((prev) => {
                 const idx = prev.findIndex((x) => x.id === c.id);

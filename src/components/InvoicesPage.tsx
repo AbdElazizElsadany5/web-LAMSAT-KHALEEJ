@@ -472,7 +472,7 @@ export function InvoicesPage({
               {/* Items List */}
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#AAA", marginBottom: 10 }}>
-                  الخدمات المقدمة وتوزيع العمولات:
+                  الخدمات المقدمة وتفاصيل الفاتورة:
                 </div>
                 <div className="data-table-wrap">
                   <table className="data-table">
@@ -482,7 +482,6 @@ export function InvoicesPage({
                         <th>الحلاق المنفذ</th>
                         <th>الكمية</th>
                         <th>سعر الخدمة</th>
-                        <th>عمولة الحلاق (محفوظة)</th>
                         <th>الإجمالي</th>
                       </tr>
                     </thead>
@@ -493,7 +492,6 @@ export function InvoicesPage({
                           <td style={{ color: "#D4AF37" }}>{it.barber}</td>
                           <td style={{ fontFamily: "Inter" }}>{it.qty}</td>
                           <td style={{ fontFamily: "Inter" }}>{it.price} ج.م</td>
-                          <td style={{ fontFamily: "Inter", color: "#56D364" }}>{it.commission} ج.م</td>
                           <td style={{ fontWeight: 800, fontFamily: "Inter", color: "#F5C242" }}>
                             {it.price * it.qty} ج.م
                           </td>
@@ -721,7 +719,7 @@ export function InvoicesPage({
             </div>
             <div className="modal-body">
               <p style={{ fontSize: 13, color: "#CCC", marginBottom: 14 }}>
-                سيتم إلغاء الفاتورة وعكس تأثيرها المالي على رصيد الصندوق وعمولات الحلاقين، وتوثيق ذلك في سجل العمليات.
+                سيتم إلغاء الفاتورة وعكس تأثيرها المالي على رصيد الصندوق، وتوثيق ذلك في سجل العمليات.
               </p>
               <div className="form-group">
                 <label className="form-label" style={{ color: "#FF8E92" }}>
@@ -772,7 +770,7 @@ export function InvoicesPage({
             </div>
             <div className="modal-body">
               <p style={{ fontSize: 13, color: "#CCC", marginBottom: 14 }}>
-                سيتم استرجاع المبلغ ({selectedInvoice.total} ج.م) للعميل وخصمه من مبيعات الوردية وعكس عمولات الحلاقين المسجلة.
+                سيتم استرجاع المبلغ ({selectedInvoice.total} ج.م) للعميل وخصمه من مبيعات الوردية وتوثيق العملية في سجل العمليات.
               </p>
               <div className="form-group">
                 <label className="form-label" style={{ color: "#FFAE42" }}>

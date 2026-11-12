@@ -311,10 +311,12 @@ export function Icon({
   name,
   size = 18,
   className = "",
+  style,
 }: {
   name: IconName;
   size?: number;
   className?: string;
+  style?: React.CSSProperties;
 }) {
   return (
     <svg
@@ -327,6 +329,7 @@ export function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
+      style={style}
       aria-hidden="true"
     >
       {iconPaths[name]}

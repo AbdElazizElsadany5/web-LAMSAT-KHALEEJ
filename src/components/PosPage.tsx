@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { ServiceItem, Barber, CartItem, HeldOrder, ServiceCategory } from "../types";
+import { ServiceItem, Barber, CartItem, HeldOrder, ServiceCategory, AdvanceRecord } from "../types";
 import { Icon } from "./Icons";
 import { sfx } from "../utils/audio";
 
@@ -10,6 +10,7 @@ export function PosPage({
   activeCashier,
   shiftNumber = 104,
   onOpenQueue,
+  onAddAdvance,
 }: {
   services: ServiceItem[];
   barbers: Barber[];
@@ -17,6 +18,7 @@ export function PosPage({
   activeCashier: string;
   shiftNumber?: number;
   onOpenQueue?: () => void;
+  onAddAdvance?: (advance: AdvanceRecord) => void;
 }) {
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory>("الكل");
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,6 +71,52 @@ export function PosPage({
   const [showHoldModal, setShowHoldModal] = useState(false);
   const [holdNote, setHoldNote] = useState("");
   const [notification, setNotification] = useState("");
+
+  // Cashier Advance Modal State
+  const [showAdvanceModal, setShowAdvanceModal] = useState(false);
+  const [advanceEmpId, setAdvanceEmpId] = useState(barbers[0]?.id || "");
+  const [advanceAmount, setAdvanceAmount] = useState("");
+  const [advanceReason, setAdvanceReason] = useState("");
+  const [advanceNotes, setAdvanceNotes] = useState("");
+
+  const handleSaveAdvanceFromCashier = () => {
+    if (!advanceEmpId || !advanceAmount || !advanceReason.trim()) {
+      showToast("⚠️ يرجى تحديد الموظف والمبلغ وسبب السلفة");
+      return;
+    }
+    const targetBarber = barbers.find((b) => b.id === advanceEmpId);
+    if (!targetBarber) return;
+
+    const numAmount = Number(advanceAmount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      showToast("⚠️ الرجاء إدخال مبلغ صحيح للسلفة");
+      return;
+    }
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("ar-EG", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const timeStr = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+
+    const newAdvance: AdvanceRecord = {
+      id: `ADV-${Date.now()}`,
+      barberId: targetBarber.id,
+      barberName: targetBarber.name,
+      amount: numAmount,
+      reason: advanceReason.trim(),
+      date: dateStr,
+      time: timeStr,
+      registeredBy: activeCashier,
+      registeredByRole: "cashier",
+      status: "نشط",
+      notes: advanceNotes.trim() ? `كاشير: ${advanceNotes.trim()}` : "سلفة مسجلة من طرفية الكاشير",
+    };
+
+    if (onAddAdvance) {
+      onAddAdvance(newAdvance);
+    }
+    setShowAdvanceModal(false);
+    showToast(`✅ تم تسجيل سلفة بقيمة ${numAmount} ج.م للموظف «${targetBarber.name}»`);
+  };
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -380,6 +428,27 @@ export function PosPage({
               <kbd>F6</kbd>
             </button>
           )}
+
+          <button
+            type="button"
+            className="pending-orders-pill"
+            onClick={() => {
+              setAdvanceEmpId(barbers[0]?.id || "");
+              setAdvanceAmount("");
+              setAdvanceReason("");
+              setAdvanceNotes("");
+              setShowAdvanceModal(true);
+            }}
+            title="تسجيل سلفة موظف جديدة"
+            style={{
+              borderColor: "rgba(245, 194, 66, 0.5)",
+              color: "#F5C242",
+              background: "rgba(245, 194, 66, 0.08)",
+            }}
+          >
+            <Icon name="dollarSign" size={15} />
+            <span>سلفة موظف</span>
+          </button>
         </div>
 
         {/* Live Date and Time */}
@@ -998,6 +1067,177 @@ export function PosPage({
                 onClick={() => setShowPendingModal(false)}
               >
                 إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cashier Add Employee Advance Modal */}
+      {showAdvanceModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 600,
+            background: "rgba(0,0,0,0.8)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: "#161616",
+              border: "1.5px solid #D4AF37",
+              borderRadius: 18,
+              padding: 28,
+              width: "100%",
+              maxWidth: 480,
+              boxShadow: "0 25px 70px rgba(0,0,0,0.8), 0 0 30px rgba(212,175,55,0.15)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    background: "rgba(212, 175, 55, 0.15)",
+                    border: "1px solid #D4AF37",
+                    color: "#F5C242",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Icon name="dollarSign" size={20} />
+                </span>
+                <div>
+                  <h3 style={{ margin: 0, color: "#FFF", fontSize: 18, fontWeight: 800 }}>
+                    تسجيل سلفة موظف جديدة
+                  </h3>
+                  <span style={{ fontSize: 12, color: "#888" }}>الطرفية الحالية: {activeCashier}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdvanceModal(false)}
+                style={{
+                  background: "transparent",
+                  border: 0,
+                  color: "#888",
+                  cursor: "pointer",
+                  padding: 4,
+                }}
+              >
+                <Icon name="x" size={20} />
+              </button>
+            </div>
+
+            {/* Strict Role Policy Warning */}
+            <div
+              style={{
+                background: "rgba(229, 72, 77, 0.12)",
+                border: "1px solid rgba(229, 72, 77, 0.35)",
+                borderRadius: 10,
+                padding: "10px 14px",
+                marginBottom: 16,
+                fontSize: 12,
+                color: "#FFA8AB",
+                lineHeight: 1.5,
+                display: "flex",
+                gap: 8,
+              }}
+            >
+              <Icon name="alert" size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <strong>تنبيه الرقابة المالية:</strong> الكاشير يملك صلاحية <u>إضافة السلفة فقط</u>. لا يمكن للكاشير تعديل أو حذف أي سلفة بعد تسجيلها، والتعديل مقتصر على المدير العام.
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label className="form-label">الموظف المستلم *</label>
+                <select
+                  className="form-input"
+                  value={advanceEmpId}
+                  onChange={(e) => setAdvanceEmpId(e.target.value)}
+                  style={{ background: "#1C180E", borderColor: "#5E4E25", color: "#FFF", fontWeight: 700 }}
+                >
+                  {barbers.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} — {b.title} ({b.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label">مبلغ السلفة (ج.م) *</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="مثال: 300"
+                  value={advanceAmount}
+                  onChange={(e) => setAdvanceAmount(e.target.value)}
+                  min="1"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="form-label">سبب السلفة *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="مثال: سلفة علاجية، مشتريات شخصية، ظروف عائلية..."
+                  value={advanceReason}
+                  onChange={(e) => setAdvanceReason(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="form-label">ملاحظات إضافية</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="ملاحظات تفصيلية أو كود إذن الصرف..."
+                  value={advanceNotes}
+                  onChange={(e) => setAdvanceNotes(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={handleSaveAdvanceFromCashier}
+                style={{ flex: 1, height: 44, fontSize: 15 }}
+              >
+                <Icon name="check" size={17} />
+                <span>تأكيد تسجيل وصرف السلفة</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAdvanceModal(false)}
+                style={{
+                  height: 44,
+                  padding: "0 18px",
+                  background: "#1E1E1E",
+                  border: "1px solid #333",
+                  color: "#CCC",
+                  borderRadius: 10,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 14,
+                }}
+              >
+                إلغاء
               </button>
             </div>
           </div>

@@ -71,10 +71,18 @@ export function InventoryPage({
 
   // Inventory valuation
   const totalValue = useMemo(() => {
-    return products.reduce((acc, p) => acc + p.stock * p.unitCost, 0);
+    return products.reduce((acc, p) => {
+      const cost = Number(p.unitCost ?? p.purchasePrice ?? 0);
+      const qty = Number(p.stock ?? 0);
+      const val = isNaN(cost) || isNaN(qty) ? 0 : cost * qty;
+      return acc + val;
+    }, 0);
   }, [products]);
 
-  const lowStockCount = products.filter((p) => p.stock <= p.minThreshold).length;
+  const lowStockCount = products.filter((p) => {
+    const min = Number(p.minThreshold ?? p.minAlertStock ?? 5);
+    return Number(p.stock ?? 0) <= min;
+  }).length;
 
   // Handle Save Purchase
   const handleSavePurchase = (e: React.FormEvent) => {
@@ -315,8 +323,10 @@ export function InventoryPage({
             </thead>
             <tbody>
               {filteredProducts.map((p) => {
-                const isCritical = p.stock <= p.minThreshold / 2;
-                const isLow = p.stock <= p.minThreshold;
+                const minThresh = Number(p.minThreshold ?? p.minAlertStock ?? 5);
+                const costVal = Number(p.unitCost ?? p.purchasePrice ?? 0);
+                const isCritical = p.stock <= minThresh / 2;
+                const isLow = p.stock <= minThresh;
 
                 return (
                   <tr key={p.id}>
@@ -340,9 +350,9 @@ export function InventoryPage({
                         {p.stock}
                       </strong>
                     </td>
-                    <td style={{ fontFamily: "Inter", color: "#888" }}>{p.minThreshold}</td>
+                    <td style={{ fontFamily: "Inter", color: "#888" }}>{minThresh}</td>
                     <td style={{ fontFamily: "Inter", fontWeight: 700, color: "#F5C242" }}>
-                      {p.unitCost} ج.م
+                      {costVal.toLocaleString("ar-EG")} ج.م
                     </td>
                     <td style={{ fontSize: 13, color: "#AAA" }}>{p.supplier}</td>
                     <td>
