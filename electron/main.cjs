@@ -1,6 +1,12 @@
 const { app, BrowserWindow, ipcMain, screen } = require("electron");
 const path = require("path");
 
+app.name = "lamsat-khaleeji-pos";
+try {
+  app.setPath("userData", path.join(app.getPath("appData"), "lamsat-khaleeji-pos"));
+} catch (e) {}
+app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
+
 let mainWindow = null;
 
 function createWindow() {
@@ -21,7 +27,7 @@ function createWindow() {
     title: "لمسة خليجي — نظام إدارة صالون الحلاقة",
     backgroundColor: "#0B0B0B",
     show: false,
-    icon: path.join(__dirname, "../public/favicon.png"),
+    icon: path.join(__dirname, "../public/icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
