@@ -398,20 +398,48 @@ export async function sendTelegramShiftClose(
   durationText: string,
   actualCash: number,
   salesTotal: number,
+  breakdown?: {
+    cashSales?: number;
+    cardSales?: number;
+    instaPaySales?: number;
+    drawerExpenses?: number;
+    expectedCash?: number;
+    difference?: number;
+    notes?: string;
+  },
 ): Promise<boolean> {
   const config = getTelegramSettings();
   if (!config.notifyShift) return false;
+
+  let diffText = "";
+  if (breakdown && breakdown.difference !== undefined) {
+    if (breakdown.difference === 0) {
+      diffText = `<b>حالة الدرج:</b> متطابق تماماً (لا يوجد عجز أو زيادة)`;
+    } else if (breakdown.difference > 0) {
+      diffText = `<b>حالة الدرج:</b> فائض +${breakdown.difference.toLocaleString("ar-EG")} ج.م`;
+    } else {
+      diffText = `<b>حالة الدرج:</b> عجز ${breakdown.difference.toLocaleString("ar-EG")} ج.م`;
+    }
+  }
 
   const msg = [
     `<b>تم إقفال الوردية #${shiftId} وتسليم الدرج</b>`,
     `━━━━━━━━━━━━━━━━`,
     `<b>المسؤول:</b> ${cashierName}`,
     `<b>مدة العمل:</b> ${durationText}`,
-    `<b>إجمالي مبيعات الوردية:</b> ${salesTotal.toLocaleString("ar-EG")} ج.م`,
-    `<b>النقدية المستلمة بالدرج:</b> ${actualCash.toLocaleString("ar-EG")} ج.م`,
+    `<b>إجمالي مبيعات الوردية:</b> <b>${salesTotal.toLocaleString("ar-EG")} ج.م</b>`,
+    breakdown?.cashSales !== undefined ? `• مبيعات كاش (بالدرج): ${breakdown.cashSales.toLocaleString("ar-EG")} ج.م` : "",
+    breakdown?.cardSales !== undefined ? `• مبيعات فيزا / POS: ${breakdown.cardSales.toLocaleString("ar-EG")} ج.م` : "",
+    breakdown?.instaPaySales !== undefined ? `• مبيعات إنستاباي / محفظة: ${breakdown.instaPaySales.toLocaleString("ar-EG")} ج.م` : "",
+    breakdown?.drawerExpenses !== undefined && breakdown.drawerExpenses > 0 ? `• منصرفات من الدرج: -${breakdown.drawerExpenses.toLocaleString("ar-EG")} ج.م` : "",
+    `<b>النقدية الفعلية المسلمة بالدرج:</b> <b>${actualCash.toLocaleString("ar-EG")} ج.م</b>`,
+    diffText,
+    breakdown?.notes ? `<b>ملاحظات الاستلام:</b> ${breakdown.notes}` : "",
     `━━━━━━━━━━━━━━━━`,
     `<i>تم توثيق إحصائيات الوردية في سجلات الإدارة.</i>`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return sendTelegramMessage(msg);
 }
@@ -422,6 +450,7 @@ export async function sendTelegramShiftClose(
 export async function sendTelegramInvoice(
   invoice: Invoice,
   cashierName?: string,
+  drawerBalance?: number,
 ): Promise<boolean> {
   const config = getTelegramSettings();
   if (!config.notifyInvoice) return false;
@@ -430,13 +459,37 @@ export async function sendTelegramInvoice(
     .map((it) => `• ${it.name} (${it.price} ج.م) — الحلاق: ${it.barber}`)
     .join("\n");
 
+  let methodDetail = invoice.paymentMethod as string;
+  if (invoice.paymentMethod === "دفع مختلط" && invoice.splitDetails) {
+    methodDetail = `دفع مختلط (كاش: ${invoice.splitDetails.cash} ج.م + بطاقة: ${invoice.splitDetails.card} ج.م)`;
+  } else if (invoice.paymentMethod === "محافظ إلكترونية") {
+    methodDetail = `محفظة إلكترونية (${invoice.walletProvider || "إنستاباي/فودافون كاش"}${
+      invoice.walletSenderNumber ? ` - رقم المحوّل: ${invoice.walletSenderNumber}` : ""
+    })`;
+  } else if (invoice.paymentMethod === "نقداً") {
+    methodDetail = "نقداً (كاش بالدرج)";
+  } else if (invoice.paymentMethod === "بطاقة") {
+    methodDetail = "بطاقة بنكية / فيزا (POS)";
+  }
+
+  const discountLine = invoice.discount > 0 ? `\n<b>الخصم:</b> ${invoice.discount} ج.م` : "";
+  const tipLine = invoice.tip > 0 ? `\n<b>الإكرامية (التيبس):</b> ${invoice.tip} ج.م` : "";
+  const drawerLine =
+    drawerBalance !== undefined
+      ? `\n<b>النقدية بالدرج حالياً:</b> <b>${drawerBalance.toLocaleString("ar-EG")} ج.م</b>`
+      : "";
+
   const msg = [
-    `<b>فاتورة جديدة #${invoice.id}</b>`,
+    `<b>فاتورة مبيعات جديدة #${invoice.id}</b>`,
     `━━━━━━━━━━━━━━━━`,
-    `<b>الإجمالي:</b> <b>${invoice.subtotal.toLocaleString("ar-EG")} ج.م</b> (${invoice.paymentMethod})`,
+    `<b>المبلغ الإجمالي المدفوع:</b> <b>${invoice.total.toLocaleString("ar-EG")} ج.م</b>`,
+    `<b>طريقة الدفع:</b> ${methodDetail}`,
+    discountLine,
+    tipLine,
     `<b>العميل:</b> ${invoice.customerName || "عميل بدون تسجيل"}`,
-    `<b>الخدمات:</b>\n${itemsList}`,
+    `<b>الخدمات المطلوبة:</b>\n${itemsList}`,
     cashierName ? `<b>الكاشير:</b> ${cashierName}` : "",
+    drawerLine,
     `<b>التاريخ والوقت:</b> ${invoice.date} - ${invoice.time}`,
     `━━━━━━━━━━━━━━━━`,
     `<i>صالون لمسة خليجي</i>`,
@@ -515,6 +568,8 @@ export async function sendTelegramHourlyDigest(stats: {
   hourlyRevenue: number;
   totalToday: number;
   cashInDrawer: number;
+  activeCashier?: string;
+  shiftId?: number;
 }): Promise<boolean> {
   const config = getTelegramSettings();
   if (!config.notifyHourly) return false;
@@ -523,13 +578,15 @@ export async function sendTelegramHourlyDigest(stats: {
     `<b>تقرير الصالون الدوري — الساعة ${stats.hourStr}</b>`,
     `━━━━━━━━━━━━━━━━`,
     `<b>فواتير الساعة الماضية:</b> ${stats.hourlyCount} فاتورة`,
-    `<b>إيرادات الساعة:</b> ${stats.hourlyRevenue.toLocaleString("ar-EG")} ج.م`,
-    `<b>إجمالي مبيعات اليوم حتى الآن:</b> ${stats.totalToday.toLocaleString("ar-EG")} ج.م`,
-    `<b>النقدية المتواجدة بالدرج حالياً:</b> ${stats.cashInDrawer.toLocaleString("ar-EG")} ج.م`,
+    `<b>إيرادات الساعة الماضية:</b> <b>${stats.hourlyRevenue.toLocaleString("ar-EG")} ج.م</b>`,
+    `<b>إجمالي مبيعات اليوم:</b> <b>${stats.totalToday.toLocaleString("ar-EG")} ج.م</b>`,
+    `<b>النقدية المتواجدة بالدرج حالياً:</b> <b>${stats.cashInDrawer.toLocaleString("ar-EG")} ج.م</b>`,
+    stats.activeCashier ? `<b>الكاشير المناوب:</b> ${stats.activeCashier}${stats.shiftId ? ` (وردية #${stats.shiftId})` : ""}` : "",
     `━━━━━━━━━━━━━━━━`,
-    `<i>تقرير آلي من نظام لمسة خليجي</i>`,
-  ].join("\n");
+    `<i>تقرير آلي دقيق من نظام لمسة خليجي</i>`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return sendTelegramMessage(msg);
 }
-

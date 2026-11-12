@@ -280,29 +280,55 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [activeShiftSession]);
 
-  // Hourly Telegram Digest / Summary Interval
+  // Hourly Telegram Digest / Summary Interval (Accurate Real-Time Accounting)
   useEffect(() => {
     let lastSentHour = -1;
     const interval = window.setInterval(() => {
       const now = new Date();
       const currentHour = now.getHours();
-      // Send once per hour at top of the hour (or on hour change while app is active)
-      if (currentHour !== lastSentHour && now.getMinutes() >= 0) {
+      // Send once per hour when hour changes while active shift is open
+      if (currentHour !== lastSentHour) {
         lastSentHour = currentHour;
         const config = getTelegramSettings();
         if (config.enabled && config.notifyHourly && activeShiftSession) {
           const hourFormatted = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
           const currentShift = shifts.find((s) => s.status === "نشطة");
-          const drawerCash =
-            (currentShift?.openingCash || 0) + (currentShift?.cashSales || 0) - (currentShift?.drawerExpenses || 0);
-          const totalToday = invoices.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+
+          // 1. Real invoices issued in the last 60 minutes
+          const oneHourAgo = now.getTime() - 60 * 60 * 1000;
+          const lastHourInvoices = invoices.filter((inv) => {
+            if (inv.status === "ملغاة" || inv.shiftId === 104) return false;
+            if (inv.timestamp) return inv.timestamp >= oneHourAgo;
+            return inv.shiftId === activeShiftSession.shiftId;
+          });
+
+          const hourlyCount = lastHourInvoices.length;
+          const hourlyRevenue = lastHourInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+
+          // 2. Real invoices of today / active shift (excluding demo/mock shift 104)
+          const todayDateStr = now.toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" });
+          const todayInvoices = invoices.filter((inv) => {
+            if (inv.status === "ملغاة" || inv.shiftId === 104) return false;
+            if (inv.shiftId === activeShiftSession.shiftId) return true;
+            if (inv.date === todayDateStr) return true;
+            if (inv.timestamp && now.getTime() - inv.timestamp < 24 * 3600 * 1000) return true;
+            return false;
+          });
+          const totalToday = todayInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+
+          // 3. Exact live drawer cash
+          const drawerCash = currentShift
+            ? (currentShift.expectedDrawerCash ?? ((currentShift.openingCash || 0) + (currentShift.cashSales || 0) - (currentShift.drawerExpenses || 0)))
+            : 0;
 
           sendTelegramHourlyDigest({
             hourStr: hourFormatted,
-            hourlyCount: Math.min(invoices.length, 5),
-            hourlyRevenue: Math.round(totalToday / Math.max(1, currentHour || 1)),
+            hourlyCount,
+            hourlyRevenue,
             totalToday,
             cashInDrawer: drawerCash,
+            activeCashier: activeShiftSession.cashierName,
+            shiftId: activeShiftSession.shiftId,
           });
         }
       }
@@ -406,28 +432,43 @@ export default function App() {
     secureStorage.setItem("pos_invoices_data", updatedInvoices);
     setClearCartSignal((s) => s + 1);
 
+    let latestDrawerCash: number | undefined;
+
     // update shift cash synchronously
     setShifts((prev) => {
       const active = prev.find((s) => s.status === "نشطة");
       if (!active) return prev;
-      let newCash = active.cashSales;
-      let newCard = active.cardSales;
+      let newCash = active.cashSales || 0;
+      let newCard = active.cardSales || 0;
+      let newInstapay = active.instaPaySales || active.instapaySales || 0;
+
       if (newInvoice.paymentMethod === "نقداً") {
         newCash += newInvoice.total;
       } else if (newInvoice.paymentMethod === "بطاقة") {
         newCard += newInvoice.total;
+      } else if (newInvoice.paymentMethod === "محافظ إلكترونية" || (newInvoice.paymentMethod as string) === "إنستاباي") {
+        newInstapay += newInvoice.total;
       } else if (newInvoice.paymentMethod === "دفع مختلط" && newInvoice.splitDetails) {
-        newCash += newInvoice.splitDetails.cash;
-        newCard += newInvoice.splitDetails.card;
+        newCash += newInvoice.splitDetails.cash || 0;
+        newCard += newInvoice.splitDetails.card || 0;
       }
+
+      const totalSales = newCash + newCard + newInstapay;
+      const expectedCash = (active.openingCash || 0) + newCash - (active.drawerExpenses || 0);
+      latestDrawerCash = expectedCash;
+
       const updated = prev.map((s) =>
         s.id === active.id
           ? {
               ...s,
               cashSales: newCash,
               cardSales: newCard,
-              expectedCash: s.openingCash + newCash - s.drawerExpenses,
-              expectedDrawerCash: s.openingCash + newCash - s.drawerExpenses,
+              instaPaySales: newInstapay,
+              instapaySales: newInstapay,
+              totalSales,
+              invoiceCount: (s.invoiceCount || 0) + 1,
+              expectedCash,
+              expectedDrawerCash: expectedCash,
             }
           : s,
       );
@@ -443,7 +484,7 @@ export default function App() {
       "",
       "عادي",
     );
-    sendTelegramInvoice(newInvoice, activeShiftSession?.cashierName);
+    sendTelegramInvoice(newInvoice, activeShiftSession?.cashierName, latestDrawerCash);
   };
 
   // Barber Status Update (Punch in/out/break)
@@ -972,15 +1013,25 @@ export default function App() {
       "حرج",
     );
 
-    const targetShift = shifts.find((s) => s.id === shiftId);
+    const targetShift = updatedShifts.find((s) => s.id === shiftId);
     const totalSales =
       (targetShift?.cashSales || 0) + (targetShift?.cardSales || 0) + (targetShift?.instaPaySales || 0);
+    const expectedDrawer = targetShift?.expectedDrawerCash ?? targetShift?.expectedCash ?? 0;
     sendTelegramShiftClose(
       shiftId,
       activeShiftSession?.cashierName || targetShift?.cashierName || "مسؤول الوردية",
       durationText,
       actualCash,
       totalSales,
+      {
+        cashSales: targetShift?.cashSales || 0,
+        cardSales: targetShift?.cardSales || 0,
+        instaPaySales: targetShift?.instaPaySales || 0,
+        drawerExpenses: targetShift?.drawerExpenses || 0,
+        expectedCash: expectedDrawer,
+        difference: actualCash - expectedDrawer,
+        notes,
+      },
     );
 
     if (activeShiftSession && activeShiftSession.shiftId === shiftId) {

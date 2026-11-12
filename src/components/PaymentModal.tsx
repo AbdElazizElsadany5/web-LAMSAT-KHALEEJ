@@ -108,6 +108,7 @@ export function PaymentModal({
       customerPhone: "—",
       date: now.toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" }),
       time: now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
+      timestamp: now.getTime(),
       items: cart.map((item) => ({
         name: item.name,
         barber: item.barberName,

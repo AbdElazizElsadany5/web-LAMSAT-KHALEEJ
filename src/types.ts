@@ -82,6 +82,7 @@ export type Invoice = {
   customerPhone: string;
   date: string;
   time: string;
+  timestamp?: number;
   items: InvoiceItem[];
   subtotal: number;
   discount: number;
