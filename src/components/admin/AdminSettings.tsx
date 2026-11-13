@@ -1,8 +1,14 @@
 import { useState, useEffect } from "react";
 import { Icon } from "../Icons";
+import { Barber } from "../../types";
 import { getSalonSettings, saveSalonSettings } from "../../utils/salonSettings";
 import { getThemeMode, saveThemeMode, ThemeMode } from "../../utils/themeSettings";
 import { secureStorage } from "../../utils/secureStorage";
+import {
+  getShiftAuthSettings,
+  saveShiftAuthSettings,
+  ShiftAuthSettings,
+} from "../../utils/shiftAuthSettings";
 import {
   getPayrollSettings,
   savePayrollSettings,
@@ -41,14 +47,17 @@ export function AdminSettings({
   onShowToast,
   adminPassword,
   onUpdateAdminPassword,
+  barbers = [],
 }: {
   onSaveSettings: (settings: Record<string, string>) => void;
   onShowToast: (msg: string) => void;
   adminPassword?: string;
   onUpdateAdminPassword?: (newPass: string) => void;
+  barbers?: Barber[];
 }) {
   const [activeTab, setActiveTab] = useState<"salon" | "telegram" | "general" | "attendance" | "payroll" | "sales" | "security">("salon");
   const [themeMode, setThemeMode] = useState<ThemeMode>(getThemeMode);
+  const [shiftAuth, setShiftAuth] = useState<ShiftAuthSettings>(getShiftAuthSettings);
 
   // Telegram Notifications State
   const [telegram, setTelegram] = useState<TelegramSettings>(getTelegramSettings);
@@ -125,6 +134,7 @@ export function AdminSettings({
 
     saveAttendancePolicy(attendancePolicy);
     saveTelegramSettings(telegram);
+    saveShiftAuthSettings(shiftAuth);
 
     onSaveSettings({
       salonName: updated.salonName,
@@ -2218,15 +2228,210 @@ export function AdminSettings({
           )}
 
           {activeTab === "sales" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 600 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)" }}>
-                <input type="checkbox" defaultChecked />
-                <span>إتاحة إضافة إكراميات الحلاقين (Tips) واحتسابها بمسير الرواتب</span>
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)" }}>
-                <input type="checkbox" defaultChecked />
-                <span>إظهار زر الدفع عبر «إنستاباي - InstaPay» في الكاشير</span>
-              </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 660 }}>
+              {/* Shift Auth Policy Card */}
+              <div
+                style={{
+                  background: "var(--surface-soft)",
+                  border: "1.5px solid var(--border-gold)",
+                  borderRadius: 14,
+                  padding: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      background: "var(--gold-soft)",
+                      border: "1px solid var(--gold)",
+                      color: "var(--gold)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Icon name="lock" size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0, color: "var(--light-gold)" }}>
+                      صلاحيات بدء الوردية وتحديد مسؤول الكاشير (خاص بالمدير)
+                    </h3>
+                    <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "2px 0 0" }}>
+                      حدد بدقة كيف يُسمح ببدء الوردية لمنع كتابة أي أسماء عشوائية من غير المصرح لهم
+                    </p>
+                  </div>
+                </div>
+
+                {/* Mode selector */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 12,
+                      padding: "12px 14px",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      background: shiftAuth.mode === "specific_person" ? "var(--surface-2)" : "transparent",
+                      border: `1.5px solid ${shiftAuth.mode === "specific_person" ? "var(--gold)" : "var(--border)"}`,
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="shiftAuthMode"
+                      checked={shiftAuth.mode === "specific_person"}
+                      onChange={() => setShiftAuth((prev) => ({ ...prev, mode: "specific_person" }))}
+                      style={{ marginTop: 3 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ fontSize: 13.5, color: "var(--text)", display: "block" }}>
+                        تحديد شخص بعينه حصرياً للوردية (مسؤول محدد من الإدارة)
+                      </strong>
+                      <span style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, display: "block" }}>
+                        لن يتمكن أي شخص آخر من فتح الوردية إلا بالاسم المحدد هنا أو كلمة مرور المدير العام.
+                      </span>
+
+                      {shiftAuth.mode === "specific_person" && (
+                        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                          <label className="form-label" style={{ fontSize: 12, fontWeight: 700 }}>
+                            اختر من فريق العمل أو اكتب اسم المسؤول المعتمد:
+                          </label>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <select
+                              className="form-select"
+                              style={{ flex: 1, height: 40, fontSize: 13 }}
+                              value={shiftAuth.specificPersonName || ""}
+                              onChange={(e) =>
+                                setShiftAuth((prev) => ({ ...prev, specificPersonName: e.target.value }))
+                              }
+                            >
+                              <option value="">-- اختر من قائمة الموظفين المسجلين --</option>
+                              {barbers.map((b) => (
+                                <option key={b.id} value={b.name}>
+                                  {b.name} ({b.title || "موظف"})
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="أو اكتب اسماً يدوياً..."
+                              value={shiftAuth.specificPersonName || ""}
+                              onChange={(e) =>
+                                setShiftAuth((prev) => ({ ...prev, specificPersonName: e.target.value }))
+                              }
+                              style={{ width: "200px", height: 40, fontSize: 13 }}
+                            />
+                          </div>
+                          {shiftAuth.specificPersonName && (
+                            <div style={{ fontSize: 12, color: "var(--success-text)", fontWeight: 700 }}>
+                              ✓ المسؤول المعتمد حالياً للوردية: «{shiftAuth.specificPersonName}»
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 12,
+                      padding: "12px 14px",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      background: shiftAuth.mode === "any_authorized" ? "var(--surface-2)" : "transparent",
+                      border: `1.5px solid ${shiftAuth.mode === "any_authorized" ? "var(--gold)" : "var(--border)"}`,
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="shiftAuthMode"
+                      checked={shiftAuth.mode === "any_authorized"}
+                      onChange={() => setShiftAuth((prev) => ({ ...prev, mode: "any_authorized" }))}
+                      style={{ marginTop: 3 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ fontSize: 13.5, color: "var(--text)", display: "block" }}>
+                        السماح للموظفين المسجلين والمصرح لهم فقط (المعتمدين في صفحة فريق العمل)
+                      </strong>
+                      <span style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, display: "block" }}>
+                        يمنع دخول أي اسم غير مسجل في النظام، ويتم التحقق من تفعيل صلاحية «بدء الوردية» لكل موظف.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Require PIN Toggle */}
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)" }}>
+                    <input
+                      type="checkbox"
+                      checked={!!shiftAuth.requirePin}
+                      onChange={(e) => setShiftAuth((prev) => ({ ...prev, requirePin: e.target.checked }))}
+                    />
+                    <strong style={{ fontWeight: 700 }}>
+                      المطالبة برمز PIN السري الخاص بالموظف عند بدء الوردية
+                    </strong>
+                  </label>
+                  <span style={{ fontSize: 11.5, color: "var(--muted)", marginRight: 24, display: "block", marginTop: 2 }}>
+                    عند التفعيل، سيطلب النظام من الموظف إدخال رمز الـ PIN المسجل له بالإدارة للتأكد من هويته.
+                  </span>
+                </div>
+
+                {/* Instant Save Shift Policy Button */}
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => {
+                    saveShiftAuthSettings(shiftAuth);
+                    onShowToast("تم حفظ وضبط صلاحيات ومسؤول بدء الوردية بنجاح!");
+                  }}
+                  style={{
+                    height: 38,
+                    alignSelf: "flex-start",
+                    padding: "0 18px",
+                    fontSize: 13,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Icon name="check" size={15} />
+                  <span>حفظ سياسة بدء الوردية الآن</span>
+                </button>
+              </div>
+
+              {/* Tips & InstaPay toggles */}
+              <div
+                style={{
+                  background: "var(--surface-soft)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 12,
+                  padding: 18,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                <strong style={{ fontSize: 14, color: "var(--text)" }}>خيارات الفواتير والدفع:</strong>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)" }}>
+                  <input type="checkbox" defaultChecked />
+                  <span>إتاحة إضافة إكراميات الحلاقين (Tips) واحتسابها بمسير الرواتب</span>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: "var(--text)" }}>
+                  <input type="checkbox" defaultChecked />
+                  <span>إظهار زر الدفع عبر «إنستاباي - InstaPay» في الكاشير</span>
+                </label>
+              </div>
             </div>
           )}
 

@@ -4,27 +4,26 @@ import { Icon } from "./Icons";
 import { DesktopTitlebar } from "./DesktopTitlebar";
 import { getSalonSettings } from "../utils/salonSettings";
 import { getThemeMode, ThemeMode, saveThemeMode } from "../utils/themeSettings";
-
-function normalizeEmployeeName(value: string): string {
-  return value
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[أإآ]/g, "ا")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    .toLowerCase();
-}
+import {
+  getShiftAuthSettings,
+  validateShiftCashier,
+  ShiftAuthSettings,
+} from "../utils/shiftAuthSettings";
 
 export function ShiftStartScreen({
   barbers = [],
+  adminPassword,
   onStartShift,
 }: {
   barbers?: Barber[];
+  adminPassword?: string;
   onStartShift: (cashierName: string, openingCash: number) => void;
 }) {
   const [cashierName, setCashierName] = useState("");
+  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [theme, setTheme] = useState<ThemeMode>(getThemeMode);
+  const [authSettings, setAuthSettings] = useState<ShiftAuthSettings>(getShiftAuthSettings);
   const salon = getSalonSettings();
 
   useEffect(() => {
@@ -33,8 +32,18 @@ export function ShiftStartScreen({
       if (detail) setTheme(detail);
       else setTheme(getThemeMode());
     };
+    const handleAuthSettingsChange = (e: Event) => {
+      const detail = (e as CustomEvent<ShiftAuthSettings>).detail;
+      if (detail) setAuthSettings(detail);
+      else setAuthSettings(getShiftAuthSettings());
+    };
+
     window.addEventListener("app-theme-changed", handleThemeChange);
-    return () => window.removeEventListener("app-theme-changed", handleThemeChange);
+    window.addEventListener("shift-auth-settings-changed", handleAuthSettingsChange);
+    return () => {
+      window.removeEventListener("app-theme-changed", handleThemeChange);
+      window.removeEventListener("shift-auth-settings-changed", handleAuthSettingsChange);
+    };
   }, []);
 
   const isLight = theme === "light";
@@ -47,27 +56,14 @@ export function ShiftStartScreen({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = cashierName.trim();
-    if (!trimmed) {
-      setError("من فضلك اكتب اسم المسؤول عن الوردية أولاً");
-      return;
-    }
-
-    const normalizedInput = normalizeEmployeeName(trimmed);
-    const matchedEmployee =
-      barbers.find((b) => normalizeEmployeeName(b.name) === normalizedInput) ||
-      barbers.find((b) => normalizeEmployeeName(b.name).startsWith(normalizedInput)) ||
-      barbers.find((b) => normalizeEmployeeName(b.name).includes(normalizedInput)) ||
-      barbers.find((b) => b.username && b.username.toLowerCase() === trimmed.toLowerCase());
-
-    if (matchedEmployee && matchedEmployee.canStartShift === false) {
-      setError(`غير مصرح للموظف «${matchedEmployee.name}» ببدء الوردية — يرجى مراجعة الإدارة لتفعيل الصلاحية.`);
+    const result = validateShiftCashier(cashierName, pin, barbers, adminPassword);
+    if (!result.valid) {
+      setError(result.error || "غير مصرح ببدء الوردية بهذا الاسم!");
       return;
     }
 
     setError("");
-    // Use official matched employee name if recognized, otherwise allow any entered name directly
-    const finalName = matchedEmployee ? matchedEmployee.name : trimmed;
+    const finalName = result.matchedName || cashierName.trim();
     onStartShift(finalName, 0);
   };
 
@@ -240,7 +236,11 @@ export function ShiftStartScreen({
               id="shift-cashier-name"
               type="text"
               className="form-input"
-              placeholder="اكتب اسم المسؤول عن الوردية..."
+              placeholder={
+                authSettings.mode === "specific_person" && authSettings.specificPersonName
+                  ? "اكتب اسم المسؤول المعتمد من الإدارة..."
+                  : "اكتب اسم الموظف المسجل بالإدارة..."
+              }
               value={cashierName}
               onChange={(e) => {
                 setCashierName(e.target.value);
@@ -257,6 +257,45 @@ export function ShiftStartScreen({
               autoFocus
             />
           </div>
+
+          {authSettings.requirePin && (
+            <div>
+              <label
+                htmlFor="shift-cashier-pin"
+                className="form-label"
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: isLight ? "#2B2418" : "#E5E5E5",
+                  marginBottom: 8,
+                  display: "block",
+                }}
+              >
+                رمز PIN السري للموظف / المسؤول
+              </label>
+              <input
+                id="shift-cashier-pin"
+                type="password"
+                className="form-input"
+                placeholder="أدخل رمز PIN الخاص بالموظف..."
+                value={pin}
+                onChange={(e) => {
+                  setPin(e.target.value);
+                  if (error) setError("");
+                }}
+                style={{
+                  height: 48,
+                  fontSize: 16,
+                  letterSpacing: 4,
+                  textAlign: "center",
+                  padding: "0 14px",
+                  background: isLight ? "#FFFFFF" : "#171717",
+                  color: isLight ? "#1F1A13" : "#FFF",
+                  borderColor: error ? "#E5484D" : isLight ? "#D8CFBE" : "#332B19",
+                }}
+              />
+            </div>
+          )}
 
           {error && (
             <div
@@ -277,6 +316,29 @@ export function ShiftStartScreen({
               <span>{error}</span>
             </div>
           )}
+
+          {/* Admin Policy Hint Badge */}
+          <div
+            style={{
+              background: isLight ? "rgba(212, 175, 55, 0.1)" : "rgba(212, 175, 55, 0.08)",
+              border: isLight ? "1px solid rgba(212, 175, 55, 0.3)" : "1px solid rgba(212, 175, 55, 0.2)",
+              borderRadius: 8,
+              padding: "8px 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 11.5,
+              color: isLight ? "#8A6D1C" : "var(--light-gold)",
+              fontWeight: 600,
+            }}
+          >
+            <Icon name="lock" size={13} />
+            <span>
+              {authSettings.mode === "specific_person" && authSettings.specificPersonName
+                ? "الدخول مقتصر حصرياً على المسؤول المحدد من لوحة الإدارة."
+                : "الدخول مقتصر على الموظفين المسجلين والمصرح لهم من لوحة الإدارة."}
+            </span>
+          </div>
 
           <button
             type="submit"

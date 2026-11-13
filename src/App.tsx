@@ -1104,7 +1104,13 @@ export default function App() {
 
   // Shift Start Screen (replaces LoginScreen)
   if (!activeShiftSession) {
-    return <ShiftStartScreen barbers={barbers} onStartShift={handleStartShift} />;
+    return (
+      <ShiftStartScreen
+        barbers={barbers}
+        adminPassword={adminPassword}
+        onStartShift={handleStartShift}
+      />
+    );
   }
 
   return (

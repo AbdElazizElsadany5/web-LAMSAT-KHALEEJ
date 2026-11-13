@@ -260,6 +260,7 @@ export function AdminPage({
           onShowToast={showToast}
           adminPassword={adminPassword}
           onUpdateAdminPassword={onUpdateAdminPassword}
+          barbers={barbers}
         />
       )}
 
