@@ -49,9 +49,19 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // Intercept window close to allow renderer to warn and auto-close active shifts
+  mainWindow.on("close", (e) => {
+    if (!isForceClose) {
+      e.preventDefault();
+      mainWindow.webContents.send("request-app-close");
+    }
+  });
+
   // Hide default Chromium top menu bar
   mainWindow.setMenuBarVisibility(false);
 }
+
+let isForceClose = false;
 
 // Window control IPC handlers
 ipcMain.on("window-minimize", () => {
@@ -69,6 +79,15 @@ ipcMain.on("window-maximize", () => {
 });
 
 ipcMain.on("window-close", () => {
+  if (!isForceClose) {
+    if (mainWindow) mainWindow.webContents.send("request-app-close");
+  } else {
+    if (mainWindow) mainWindow.close();
+  }
+});
+
+ipcMain.on("window-close-confirmed", () => {
+  isForceClose = true;
   if (mainWindow) mainWindow.close();
 });
 

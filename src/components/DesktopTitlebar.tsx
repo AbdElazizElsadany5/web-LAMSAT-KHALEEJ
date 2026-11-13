@@ -11,6 +11,7 @@ export function DesktopTitlebar({
   onMuteToggle,
   themeMode = "dark",
   onThemeToggle,
+  onCloseApp,
 }: {
   activeCashier?: string;
   userRole?: string;
@@ -22,6 +23,7 @@ export function DesktopTitlebar({
   onMuteToggle?: () => void;
   themeMode?: "dark" | "light";
   onThemeToggle?: () => void;
+  onCloseApp?: () => void;
 }) {
   const handleMinimize = async () => {
     try {
@@ -52,6 +54,10 @@ export function DesktopTitlebar({
   };
 
   const handleClose = async () => {
+    if (onCloseApp) {
+      onCloseApp();
+      return;
+    }
     try {
       const electronAPI = (window as unknown as { electronAPI?: { close: () => void } }).electronAPI;
       if (electronAPI?.close) {

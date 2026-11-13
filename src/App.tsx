@@ -83,6 +83,7 @@ export default function App() {
     activeShiftSession ? Math.max(0, Math.floor((Date.now() - activeShiftSession.startTimestamp) / 1000)) : 0
   );
   const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
+  const [exitShiftModalOpen, setExitShiftModalOpen] = useState(false);
 
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [lockPin, setLockPin] = useState("");
@@ -1054,6 +1055,58 @@ export default function App() {
     sfx.playClick();
   };
 
+  const handleRequestCloseApp = () => {
+    if (activeShiftSession) {
+      setExitShiftModalOpen(true);
+    } else {
+      try {
+        const electronAPI = (window as unknown as { electronAPI?: { closeConfirmed?: () => void; close?: () => void } }).electronAPI;
+        if (electronAPI?.closeConfirmed) {
+          electronAPI.closeConfirmed();
+        } else if (electronAPI?.close) {
+          electronAPI.close();
+        } else {
+          window.close();
+        }
+      } catch {
+        window.close();
+      }
+    }
+  };
+
+  const handleConfirmExitAndCloseShift = () => {
+    if (activeShiftSession) {
+      const expected = currentActiveShift?.expectedDrawerCash ?? currentActiveShift?.expectedCash ?? 0;
+      handleCloseShift(activeShiftSession.shiftId, expected, "إقفال تلقائي عند إغلاق البرنامج", activeShiftDurationText);
+      sfx.playClick();
+    }
+    setExitShiftModalOpen(false);
+    setTimeout(() => {
+      try {
+        const electronAPI = (window as unknown as { electronAPI?: { closeConfirmed?: () => void; close?: () => void } }).electronAPI;
+        if (electronAPI?.closeConfirmed) {
+          electronAPI.closeConfirmed();
+        } else if (electronAPI?.close) {
+          electronAPI.close();
+        } else {
+          window.close();
+        }
+      } catch {
+        window.close();
+      }
+    }, 150);
+  };
+
+  useEffect(() => {
+    const electronAPI = (window as unknown as { electronAPI?: { onRequestAppClose?: (cb: () => void) => () => void } }).electronAPI;
+    if (electronAPI?.onRequestAppClose) {
+      const unsub = electronAPI.onRequestAppClose(() => {
+        handleRequestCloseApp();
+      });
+      return unsub;
+    }
+  }, [activeShiftSession, currentActiveShift, activeShiftDurationText]);
+
   const handleDeleteShift = (shiftId: number) => {
     const updated = shifts.filter((s) => s.id !== shiftId);
     setShifts(updated);
@@ -1120,7 +1173,7 @@ export default function App() {
       }`}
     >
       {/* 1. Custom Windows Desktop Titlebar */}
-      <DesktopTitlebar currentPage={currentPage} />
+      <DesktopTitlebar currentPage={currentPage} onCloseApp={handleRequestCloseApp} />
 
       {/* 2. Fixed Right Sidebar in Arabic RTL */}
       <aside className="sidebar">
@@ -1880,6 +1933,155 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Exit Program & Auto-Close Active Shift Confirmation */}
+      {exitShiftModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div
+            className="modal-box"
+            style={{
+              maxWidth: 480,
+              background: "var(--card)",
+              border: "1.5px solid var(--border-gold)",
+              borderRadius: 18,
+              boxShadow: "0 24px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(212, 175, 55, 0.2)",
+              padding: 0,
+              overflow: "hidden",
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: "20px 24px",
+                background: "linear-gradient(135deg, rgba(229, 72, 77, 0.14) 0%, rgba(212, 175, 55, 0.08) 100%)",
+                borderBottom: "1px solid var(--border)",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: "50%",
+                  background: "rgba(229, 72, 77, 0.16)",
+                  border: "1.5px solid rgba(229, 72, 77, 0.5)",
+                  color: "#FF8A8E",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="alert" size={24} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: 17, fontWeight: 900, color: "var(--text)", margin: "0 0 2px" }}>
+                  تنبيه إغلاق البرنامج وإقفال الوردية
+                </h3>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                  توجد وردية كاشير جارية حالياً ومسجلة في النظام
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: "22px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div
+                style={{
+                  background: "var(--surface-soft)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 12,
+                  padding: "14px 16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <span style={{ color: "var(--muted)" }}>رقم الوردية النشطة:</span>
+                  <strong style={{ color: "var(--light-gold)" }}>#{activeShiftSession?.shiftId}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <span style={{ color: "var(--muted)" }}>مسؤول الوردية:</span>
+                  <strong style={{ color: "var(--text)" }}>{activeShiftSession?.cashierName || "الكاشير"}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <span style={{ color: "var(--muted)" }}>مدة عمل الوردية حتى الآن:</span>
+                  <strong style={{ color: "var(--success-text)", direction: "ltr" }}>{activeShiftDurationText}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+                  <span style={{ color: "var(--muted)" }}>النقدية بالدرج:</span>
+                  <strong style={{ color: "var(--light-gold)", fontSize: 14 }}>
+                    {(currentActiveShift?.expectedDrawerCash ?? currentActiveShift?.expectedCash ?? 0).toLocaleString()} ج.م
+                  </strong>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: "rgba(212, 175, 55, 0.08)",
+                  border: "1px solid rgba(212, 175, 55, 0.25)",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  fontSize: 12.5,
+                  color: "var(--light-gold)",
+                  lineHeight: 1.6,
+                }}
+              >
+                ⚡ <strong>تنبيه الإقفال التلقائي:</strong>
+                <br />
+                إغلاق البرنامج سيقوم <strong>بإقفال الوردية تلقائياً</strong>، وتسوية نقدية الدرج، وإرسال تقرير إغلاق الوردية والدرج المالي إلى بوت تليجرام، ثم الخروج بأمان.
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                padding: "14px 24px",
+                background: "var(--surface)",
+                borderTop: "1px solid var(--border)",
+                display: "flex",
+                gap: 12,
+              }}
+            >
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setExitShiftModalOpen(false)}
+                style={{ minWidth: 120, height: 44, borderRadius: 10, fontWeight: 700, fontSize: 13.5 }}
+              >
+                إلغاء والتراجع
+              </button>
+              <button
+                type="button"
+                className="danger-btn"
+                onClick={handleConfirmExitAndCloseShift}
+                style={{
+                  flex: 1,
+                  height: 44,
+                  borderRadius: 10,
+                  fontWeight: 800,
+                  fontSize: 14,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  background: "linear-gradient(135deg, #E5484D 0%, #B82A2E 100%)",
+                  color: "#FFF",
+                  border: "none",
+                  boxShadow: "0 4px 14px rgba(229, 72, 77, 0.4)",
+                  cursor: "pointer",
+                }}
+              >
+                <Icon name="lock" size={16} />
+                <span>إقفال الوردية وإغلاق البرنامج</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
